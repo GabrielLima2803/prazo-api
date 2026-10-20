@@ -63,6 +63,7 @@ var titleRules = []titleRule{
 	{name: "close.pt.activity", prefix: "Fechar atividade ", typ: TypeOther, phase: PhaseClose},
 
 	{name: "assign.grading.en", suffix: " is due to be graded", typ: TypeAssign, phase: PhaseGrading},
+	{name: "submission.due.en", suffix: " submission is due", typ: TypeAssign, phase: PhaseDue},
 	{name: "due.en", suffix: " is due", typ: TypeAssign, phase: PhaseDue},
 	{name: "open.en", suffix: " opens", typ: TypeOther, phase: PhaseOpen},
 	{name: "close.en", suffix: " closes", typ: TypeOther, phase: PhaseClose},
@@ -72,8 +73,9 @@ var titleRules = []titleRule{
 // Palavras no nome da atividade que indicam o tipo quando o template sozinho
 // é ambíguo ("Início de X" serve para quiz, feedback, escolha, base de dados...).
 var (
-	examWords = regexp.MustCompile(`(?i)\b(prova|exame|avalia[çc][ãa]o)\b`)
-	quizWords = regexp.MustCompile(`(?i)\b(question[áa]rio|quiz|teste|simulado)\b`)
+	examWords   = regexp.MustCompile(`(?i)\b(prova|exame|avalia[çc][ãa]o)\b`)
+	quizWords   = regexp.MustCompile(`(?i)\b(question[áa]rio|quiz|teste|simulado)\b`)
+	assignWords = regexp.MustCompile(`(?i)\b(tarefa|lista|trabalho|atividade|exerc[íi]cio|entrega|upload)\b`)
 )
 
 // ClassifyTitle interpreta o SUMMARY de um evento do Moodle.
@@ -91,8 +93,12 @@ func ClassifyTitle(summary string) Classification {
 			continue
 		}
 		typ := r.typ
-		if typ == TypeOther {
+		switch {
+		case typ == TypeOther:
 			typ = guessType(title)
+		case typ == TypeAssign && examWords.MatchString(title):
+			// Professores criam "Prova 1" como tarefa; para lembretes, é prova.
+			typ = TypeExam
 		}
 		return Classification{Type: typ, Phase: r.phase, Title: title, Rule: r.name}
 	}
@@ -105,6 +111,8 @@ func guessType(title string) DeadlineType {
 		return TypeExam
 	case quizWords.MatchString(title):
 		return TypeQuiz
+	case assignWords.MatchString(title):
+		return TypeAssign
 	default:
 		return TypeOther
 	}

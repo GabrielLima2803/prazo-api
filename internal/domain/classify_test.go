@@ -18,6 +18,12 @@ func TestClassifyTitle(t *testing.T) {
 		{"Leitura do capítulo 4 deve estar concluído", TypeOther, PhaseExpect, "Leitura do capítulo 4"},
 		{"Definição de grupo para MVP (Data limite)", TypeOther, PhaseDue, "Definição de grupo para MVP"},
 		{"Lista 3 is due", TypeAssign, PhaseDue, "Lista 3"},
+		// Casos reais do Moodle do CCT (2026-10).
+		{"Exercício Slide submission is due", TypeAssign, PhaseDue, "Exercício Slide"},
+		{"Término de TAREFA 9: Intervalo de convergência", TypeAssign, PhaseClose, "TAREFA 9: Intervalo de convergência"},
+		{"TAREFA 4: Integrais Impróprias deve estar concluído", TypeAssign, PhaseExpect, "TAREFA 4: Integrais Impróprias"},
+		{"Prova 1 está marcado(a) para esta data", TypeExam, PhaseDue, "Prova 1"},
+		{"Prova de ALI - P1", TypeExam, PhaseNone, "Prova de ALI - P1"},
 		{"Quiz 2 closes", TypeQuiz, PhaseClose, "Quiz 2"},
 		{"Semana Acadêmica", TypeOther, PhaseNone, "Semana Acadêmica"},
 		{"  Prova substitutiva  ", TypeExam, PhaseNone, "Prova substitutiva"},
