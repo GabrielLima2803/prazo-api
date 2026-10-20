@@ -1,0 +1,9 @@
+# segredos
+.env
+*.db
+*.db-*
+/data/
+
+# build
+/prazo
+/bin/
