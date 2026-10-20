@@ -1,0 +1,10 @@
+.git
+.env
+*.db
+*.db-*
+data/
+prazo
+bin/
+Dockerfile
+docker-compose.yml
+README.md

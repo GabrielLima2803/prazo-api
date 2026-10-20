@@ -1,0 +1,23 @@
+services:
+  prazo:
+    build:
+      context: .
+      target: final
+    image: prazo:dev
+    env_file: .env
+    environment:
+      PRAZO_LOG_FORMAT: json
+    # Por enquanto só o doctor existe; na Fase 4 vira "serve".
+    command: ["doctor", "-probe-login=false"]
+    read_only: true          # filesystem somente leitura...
+    volumes:
+      - prazo-data:/data     # ...exceto o volume do SQLite
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+volumes:
+  prazo-data:
