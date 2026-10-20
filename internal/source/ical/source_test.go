@@ -2,6 +2,7 @@ package ical
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -62,21 +63,39 @@ func TestToDeadlineFallbacks(t *testing.T) {
 	}
 }
 
+func TestClientRejectsHTMLAndBadURL(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html>login</html>"))
+	}))
+	defer srv.Close()
+
+	client, err := NewClient(srv.URL, httpx.New(httpx.Options{Transport: srv.Client().Transport}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Fetch(context.Background()); !errors.Is(err, ErrNotICalendar) {
+		t.Errorf("esperava ErrNotICalendar, veio %v", err)
+	}
+	if _, err := NewClient("http://inseguro/x", nil); !errors.Is(err, ErrInvalidURL) {
+		t.Errorf("esperava ErrInvalidURL, veio %v", err)
+	}
+}
+
 func TestSourceFetchRealFixture(t *testing.T) {
 	body, err := os.ReadFile("../../../testdata/moodle_cct_anon.ics")
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 	}))
 	defer srv.Close()
 
-	s := &Source{
-		Fetcher: &Fetcher{URL: srv.URL + "/calendar/export_execute.php?authtoken=x", Client: httpx.New(httpx.Options{})},
-		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	client, err := NewClient(srv.URL+"/calendar/export_execute.php?authtoken=x", httpx.New(httpx.Options{Transport: srv.Client().Transport}))
+	if err != nil {
+		t.Fatal(err)
 	}
-	ds, err := s.Fetch(context.Background())
+	ds, err := NewSource(client, slog.New(slog.NewTextHandler(io.Discard, nil))).Fetch(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

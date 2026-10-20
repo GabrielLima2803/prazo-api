@@ -2,55 +2,103 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	_ "time/tzdata" // binário independente do tzdata do sistema (imagem distroless)
 
 	"prazo/internal/config"
+	"prazo/internal/httpx"
 	"prazo/internal/logging"
 )
 
-const usage = `prazo: sincroniza prazos do Moodle com o Google Agenda.
+// app reúne as dependências compartilhadas pelos comandos.
+type app struct {
+	cfg    config.Config
+	log    *slog.Logger
+	http   *httpx.Client
+	stdout io.Writer
+}
 
-Uso:
-  prazo doctor [flags]       diagnostica a exportação iCal e os web services do Moodle
-  prazo sync --dry-run       lê o iCal, normaliza e mostra os próximos prazos
+type command struct {
+	name    string
+	summary string
+	run     func(ctx context.Context, a *app, args []string) error
+}
 
-Rode "prazo <comando> -h" para ver as flags.
-`
+var commands = []command{
+	{"doctor", "diagnostica a exportação iCal e os web services do Moodle", runDoctor},
+	{"sync", "sincroniza os prazos (por enquanto só --dry-run)", runSync},
+}
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		usage(os.Stderr)
+		return 2
+	}
+	cmd, ok := findCommand(args[0])
+	if !ok {
+		fmt.Fprintf(os.Stderr, "comando desconhecido %q\n\n", args[0])
+		usage(os.Stderr)
+		return 2
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "config:", err)
-		os.Exit(2)
+		fmt.Fprintf(os.Stderr, "configuração inválida:\n%v\n", err)
+		return 2
 	}
-	log := logging.New(os.Stderr, cfg.LogFormat, cfg.LogLevel)
+	a := &app{
+		cfg:    cfg,
+		log:    logging.New(os.Stderr, cfg.Log.Format, cfg.Log.Level),
+		http:   httpx.New(httpx.Options{MaxRetries: 3}),
+		stdout: os.Stdout,
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	switch os.Args[1] {
-	case "doctor":
-		err = runDoctor(ctx, cfg, log, os.Args[2:])
-	case "sync":
-		err = runSync(ctx, cfg, log, os.Args[2:])
-	case "-h", "--help", "help":
-		fmt.Print(usage)
-		return
+	switch err := cmd.run(ctx, a, args[1:]); {
+	case err == nil, errors.Is(err, flag.ErrHelp):
+		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "comando desconhecido %q\n\n%s", os.Args[1], usage)
-		os.Exit(2)
+		a.log.Error("falhou", "cmd", cmd.name, "err", err)
+		return 1
 	}
-	if err != nil {
-		log.Error("falhou", "cmd", os.Args[1], "err", err)
-		os.Exit(1)
+}
+
+func findCommand(name string) (command, bool) {
+	for _, c := range commands {
+		if c.name == name {
+			return c, true
+		}
 	}
+	return command{}, false
+}
+
+func usage(w io.Writer) {
+	fmt.Fprintln(w, "prazo: sincroniza prazos do Moodle com o Google Agenda.\n\nUso:")
+	for _, c := range commands {
+		fmt.Fprintf(w, "  prazo %-8s %s\n", c.name, c.summary)
+	}
+	fmt.Fprintln(w, "\nRode \"prazo <comando> -h\" para ver as flags.")
+}
+
+func newFlagSet(name, usage string) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Uso: prazo %s [flags]\n\n%s\n", name, usage)
+		fs.PrintDefaults()
+	}
+	return fs
 }

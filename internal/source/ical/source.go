@@ -2,55 +2,38 @@ package ical
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"prazo/internal/collections"
 	"prazo/internal/domain"
+	"prazo/internal/moodle"
 )
 
-// Source adapta o Fetcher à interface source.Source.
-type Source struct {
-	Fetcher *Fetcher
-	Log     *slog.Logger
+func NewSource(client *Client, log *slog.Logger) *Source {
+	return &Source{client: client, baseURL: client.BaseURL(), log: log}
 }
 
 func (s *Source) Fetch(ctx context.Context) ([]domain.Deadline, error) {
-	events, skipped, err := s.Fetcher.Fetch(ctx)
+	feed, err := s.client.Fetch(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range skipped {
-		s.Log.Warn("evento iCal ignorado", "err", e)
+	for _, e := range feed.Invalid {
+		s.log.Warn("evento iCal ignorado", "err", e)
 	}
-	base, err := baseURL(s.Fetcher.URL)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]domain.Deadline, 0, len(events))
-	for _, e := range events {
-		out = append(out, ToDeadline(e, base))
+	out := make([]domain.Deadline, 0, len(feed.Events))
+	for _, e := range feed.Events {
+		out = append(out, ToDeadline(e, s.baseURL))
 	}
 	return out, nil
 }
 
-// baseURL extrai "https://host" da URL de exportação (sem o authtoken).
-func baseURL(raw string) (string, error) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return "", fmt.Errorf("ical: URL inválida")
-	}
-	return u.Scheme + "://" + u.Host, nil
-}
-
-// Módulos que aparecem em links da descrição mas não são "a atividade"
-// (slides, páginas, pastas que o professor citou no enunciado).
-var nonActivityModules = map[string]struct{}{
-	"resource": {}, "url": {}, "page": {}, "folder": {}, "label": {}, "book": {},
-}
+// Módulos citados na descrição que não são a atividade em si (slides,
+// páginas, pastas do enunciado).
+var nonActivityModules = collections.NewSet("resource", "url", "page", "folder", "label", "book")
 
 var (
 	activityLink = regexp.MustCompile(`https?://[^\s\]]+/mod/(\w+)/view\.php\?id=\d+`)
@@ -58,20 +41,21 @@ var (
 	blankLines   = regexp.MustCompile(`\n{3,}`)
 )
 
-// ToDeadline converte um VEVENT do Moodle em Deadline (sem hash; ver Normalize).
-func ToDeadline(e Event, base string) domain.Deadline {
-	cl := domain.ClassifyTitle(e.Summary)
+// ToDeadline converte um evento do Moodle em Deadline, sem hash
+// (ver domain.Normalize).
+func ToDeadline(e Event, baseURL string) domain.Deadline {
+	name := moodle.ParseEventName(e.Summary)
 	d := domain.Deadline{
 		SourceID: e.UID,
-		Type:     cl.Type,
-		Phase:    cl.Phase,
-		Title:    cl.Title,
-		StartsAt: e.Start.UTC(),
-		EndsAt:   e.End.UTC(),
+		Type:     name.Type,
+		Phase:    name.Phase,
+		Title:    name.Title,
+		StartsAt: e.Start,
+		EndsAt:   e.End,
 	}
 	if len(e.Categories) > 0 {
 		d.CourseName = e.Categories[0]
-		d.CourseCode = domain.CourseCode(d.CourseName)
+		d.CourseCode = moodle.CourseCode(d.CourseName)
 		if d.Phase == domain.PhaseNone && d.Type == domain.TypeOther {
 			d.Type = domain.TypeCourseEvent
 		}
@@ -79,25 +63,24 @@ func ToDeadline(e Event, base string) domain.Deadline {
 
 	d.URL = activityURL(e.Description)
 	if d.URL == "" {
-		// O iCal não traz o link da atividade; o dia no calendário é o melhor
-		// atalho que dá para montar só com o que temos.
-		d.URL = base + "/calendar/view.php?view=day&time=" + strconv.FormatInt(e.Start.Unix(), 10)
+		// O iCal não traz o link da atividade; o dia no calendário é o melhor atalho disponível.
+		d.URL = baseURL + "/calendar/view.php?view=day&time=" + strconv.FormatInt(e.Start.Unix(), 10)
 	}
-	d.Description = cleanDescription(e.Description, cl.Title)
+	d.Description = cleanDescription(e.Description, name.Title)
 	return d
 }
 
 func activityURL(desc string) string {
 	for _, m := range activityLink.FindAllStringSubmatch(desc, -1) {
-		if _, skip := nonActivityModules[m[1]]; !skip {
+		if !nonActivityModules.Has(m[1]) {
 			return m[0]
 		}
 	}
 	return ""
 }
 
-// cleanDescription tira o rodapé "Links: ------ [1] url" que o Moodle gera ao
-// converter HTML em texto, e os marcadores [n] no corpo.
+// cleanDescription remove o rodapé "Links: ------ [n] url" e os marcadores
+// [n] que o Moodle gera ao converter HTML em texto.
 func cleanDescription(desc, title string) string {
 	if i := strings.Index(desc, "\nLinks:\n------"); i >= 0 {
 		desc = desc[:i]
@@ -105,7 +88,7 @@ func cleanDescription(desc, title string) string {
 	desc = linkMarker.ReplaceAllString(desc, "")
 	desc = blankLines.ReplaceAllString(strings.TrimSpace(desc), "\n\n")
 	if strings.EqualFold(desc, title) {
-		return "" // o "corpo" era só o nome autolinkado da atividade
+		return "" // era só o nome da atividade, autolinkado pelo filtro do Moodle
 	}
 	return desc
 }

@@ -61,9 +61,9 @@ func TestBodyLimit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(Options{MaxBody: 10})
-	if _, err := c.Get(context.Background(), srv.URL); err == nil {
-		t.Fatal("esperava erro de limite de tamanho")
+	c := New(Options{MaxBody: 10, MaxRetries: 3})
+	if _, err := c.Get(context.Background(), srv.URL); !errors.Is(err, ErrBodyTooLarge) {
+		t.Fatalf("esperava ErrBodyTooLarge, veio %v", err)
 	}
 }
 
@@ -72,6 +72,14 @@ func TestNetworkErrorDoesNotLeakToken(t *testing.T) {
 	_, err := c.Get(context.Background(), "http://127.0.0.1:1/x?authtoken=SEGREDO")
 	if err == nil || strings.Contains(err.Error(), "SEGREDO") {
 		t.Fatalf("erro deveria existir e não conter o token: %v", err)
+	}
+}
+
+func TestRetryAfterIsRespected(t *testing.T) {
+	c := New(Options{MaxDelay: time.Minute})
+	err := &StatusError{Code: http.StatusTooManyRequests, RetryAfter: 7 * time.Second}
+	if d := c.backoff(1, err); d != 7*time.Second {
+		t.Fatalf("backoff = %v; quer 7s", d)
 	}
 }
 

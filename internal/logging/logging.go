@@ -1,5 +1,5 @@
-// Package logging monta o logger slog do Prazo e garante que nenhum segredo
-// (authtoken do iCal, wstoken do Moodle, tokens OAuth, senhas) chegue ao log.
+// Package logging cria o logger slog do Prazo com redação de segredos
+// (authtoken, wstoken, tokens OAuth, senhas).
 package logging
 
 import (
@@ -8,34 +8,24 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"prazo/internal/collections"
 )
 
 const redacted = "REDACTED"
 
-// sensitiveParams são nomes de parâmetros de query/form cujo valor é segredo.
-var sensitiveParams = map[string]struct{}{
-	"authtoken":     {},
-	"wstoken":       {},
-	"token":         {},
-	"privatetoken":  {},
-	"password":      {},
-	"passport":      {},
-	"access_token":  {},
-	"refresh_token": {},
-	"client_secret": {},
-	"code":          {},
-}
+var sensitiveParams = collections.NewSet(
+	"authtoken", "wstoken", "token", "privatetoken", "password", "passport",
+	"access_token", "refresh_token", "client_secret", "code",
+)
 
-// sensitiveInText pega "param=valor" em qualquer texto livre (mensagens de
-// erro do net/http incluem a URL inteira, por exemplo).
+// Mensagens de erro do net/http incluem a URL inteira.
 var sensitiveInText = regexp.MustCompile(
 	`(?i)\b(authtoken|wstoken|privatetoken|token|password|passport|access_token|refresh_token|client_secret)=([^&\s"'<>]+)`)
 
-// sensitiveKeys são chaves de atributo slog cujo valor nunca deve ser logado.
 var sensitiveKeys = []string{"token", "secret", "password", "authorization", "key"}
 
-// RedactURL devolve a URL com o valor dos parâmetros sensíveis trocado por
-// REDACTED. Se não for uma URL válida, aplica a redação textual.
+// RedactURL troca o valor dos parâmetros sensíveis por REDACTED.
 func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -47,7 +37,7 @@ func RedactURL(raw string) string {
 	q := u.Query()
 	changed := false
 	for k := range q {
-		if _, ok := sensitiveParams[strings.ToLower(k)]; ok {
+		if sensitiveParams.Has(strings.ToLower(k)) {
 			q.Set(k, redacted)
 			changed = true
 		}
@@ -58,7 +48,7 @@ func RedactURL(raw string) string {
 	return u.String()
 }
 
-// Redact remove segredos no formato "param=valor" de um texto livre.
+// Redact remove segredos "param=valor" de um texto livre.
 func Redact(s string) string {
 	return sensitiveInText.ReplaceAllString(s, "${1}="+redacted)
 }
@@ -73,7 +63,6 @@ func isSensitiveKey(k string) bool {
 	return false
 }
 
-// replaceAttr é o redator aplicado a todo atributo antes de ser escrito.
 func replaceAttr(_ []string, a slog.Attr) slog.Attr {
 	if isSensitiveKey(a.Key) {
 		return slog.String(a.Key, redacted)
@@ -89,7 +78,7 @@ func replaceAttr(_ []string, a slog.Attr) slog.Attr {
 	return a
 }
 
-// New cria um logger com redação. format "json" (produção) ou "text" (dev).
+// New cria o logger; format é "json" (produção) ou "text" (dev).
 func New(w io.Writer, format string, level slog.Level) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: level, ReplaceAttr: replaceAttr}
 	if format == "json" {

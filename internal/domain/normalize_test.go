@@ -1,18 +1,26 @@
 package domain
 
 import (
+	"errors"
 	"regexp"
 	"testing"
 	"time"
+
+	"prazo/internal/collections"
 )
 
 var t0 = time.Date(2026, 10, 21, 2, 59, 0, 0, time.UTC)
 
 func dl(id, course, title string, typ DeadlineType, phase Phase, at time.Time) Deadline {
-	return Deadline{SourceID: id, CourseCode: CourseCode(course), CourseName: course, Type: typ, Phase: phase, Title: title, StartsAt: at, EndsAt: at}
+	return Deadline{SourceID: id, CourseCode: courseCodes[course], CourseName: course, Type: typ, Phase: phase, Title: title, StartsAt: at, EndsAt: at}
 }
 
-const cdi = "2026/2_CCT_CCI251-03U_CDI2002"
+const (
+	cdi = "2026/2_CCT_CCI251-03U_CDI2002"
+	poo = "2026/2_CCT_CCI251-03A_POO0002"
+)
+
+var courseCodes = map[string]string{cdi: "CDI", poo: "POO"}
 
 func TestCollapseKeepsOnlyClose(t *testing.T) {
 	in := []Deadline{
@@ -48,13 +56,13 @@ func TestExpectDroppedWhenDue(t *testing.T) {
 func TestFilter(t *testing.T) {
 	in := []Deadline{
 		dl("1", cdi, "Lista 1", TypeAssign, PhaseDue, t0),
-		dl("2", "2026/2_CCT_CCI251-03A_POO0002", "Aula Prática 9", TypeAssign, PhaseDue, t0),
-		dl("3", "2026/2_CCT_CCI251-03A_POO0002", "Fórum de dúvidas", TypeForum, PhaseDue, t0),
-		dl("4", "2026/2_CCT_CCI251-03A_POO0002", "Leitura opcional", TypeAssign, PhaseDue, t0),
+		dl("2", poo, "Aula Prática 9", TypeAssign, PhaseDue, t0),
+		dl("3", poo, "Fórum de dúvidas", TypeForum, PhaseDue, t0),
+		dl("4", poo, "Leitura opcional", TypeAssign, PhaseDue, t0),
 	}
 	f := Filter{
-		Courses: map[string]struct{}{"CDI": {}},
-		Types:   map[DeadlineType]struct{}{TypeForum: {}},
+		Courses: collections.NewSet("CDI"),
+		Types:   collections.NewSet(TypeForum),
 		Titles:  regexp.MustCompile(`(?i)opcional`),
 	}
 	if got := ids(Normalize(in, NormalizeOptions{Filter: f})); got != "2" {
@@ -112,26 +120,35 @@ func TestHashChangesWithRelevantFields(t *testing.T) {
 	}
 }
 
-func TestRenderTitle(t *testing.T) {
+func TestDisplayTitle(t *testing.T) {
 	cases := []struct {
 		d    Deadline
 		want string
 	}{
-		{dl("", "2026/2_CCT_CCI251-03A_POO0002", "Aula Prática 9", TypeAssign, PhaseDue, t0), "[POO] Entrega: Aula Prática 9"},
-		{dl("", "2026/2_CCT_CCI251-03A_POO0002", "Entrega Etapa 3 do Trabalho", TypeAssign, PhaseDue, t0), "[POO] Entrega Etapa 3 do Trabalho"},
+		{dl("", poo, "Aula Prática 9", TypeAssign, PhaseDue, t0), "[POO] Entrega: Aula Prática 9"},
+		{dl("", poo, "Entrega Etapa 3 do Trabalho", TypeAssign, PhaseDue, t0), "[POO] Entrega Etapa 3 do Trabalho"},
 		{dl("", cdi, "P1", TypeExam, PhaseDue, t0), "[CDI] Prova: P1"},
 		{dl("", cdi, "TAREFA 9", TypeAssign, PhaseOpen, t0), "[CDI] Abertura: TAREFA 9"},
 		{dl("", "", "Prova de ALI - P1", TypeExam, PhaseNone, t0), "Prova de ALI - P1"},
 	}
 	for _, c := range cases {
-		if got := RenderTitle(c.d); got != c.want {
-			t.Errorf("RenderTitle = %q; quer %q", got, c.want)
+		if got := c.d.DisplayTitle(); got != c.want {
+			t.Errorf("DisplayTitle = %q; quer %q", got, c.want)
 		}
 	}
 	d := cases[0].d
 	d.Submitted = true
-	if got := RenderTitle(d); got != "✅ [POO] Entrega: Aula Prática 9" {
+	if got := d.DisplayTitle(); got != "✅ [POO] Entrega: Aula Prática 9" {
 		t.Errorf("entregue: %q", got)
+	}
+}
+
+func TestParseDeadlineType(t *testing.T) {
+	if got, err := ParseDeadlineType(" Forum "); err != nil || got != TypeForum {
+		t.Errorf("ParseDeadlineType = %q, %v", got, err)
+	}
+	if _, err := ParseDeadlineType("prova"); !errors.Is(err, ErrUnknownType) {
+		t.Errorf("esperava ErrUnknownType, veio %v", err)
 	}
 }
 

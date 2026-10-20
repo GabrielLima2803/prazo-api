@@ -1,0 +1,62 @@
+// Package domain contém as entidades e regras de negócio do Prazo. Não
+// conhece Moodle, Google nem banco de dados.
+package domain
+
+import (
+	"regexp"
+	"time"
+
+	"prazo/internal/collections"
+)
+
+type DeadlineType string
+
+const (
+	TypeAssign      DeadlineType = "assign"
+	TypeQuiz        DeadlineType = "quiz"
+	TypeForum       DeadlineType = "forum"
+	TypeExam        DeadlineType = "exam"
+	TypeCourseEvent DeadlineType = "course_event"
+	TypeOther       DeadlineType = "other"
+)
+
+var deadlineTypes = collections.NewSet(TypeAssign, TypeQuiz, TypeForum, TypeExam, TypeCourseEvent, TypeOther)
+
+// Phase é o momento da atividade que o evento representa.
+type Phase string
+
+const (
+	PhaseNone    Phase = ""
+	PhaseDue     Phase = "due"
+	PhaseOpen    Phase = "open"
+	PhaseClose   Phase = "close"
+	PhaseGrading Phase = "grading" // prazo de correção, só relevante para professores
+	PhaseExpect  Phase = "expect"  // "conclusão esperada" (completion tracking)
+)
+
+type Deadline struct {
+	SourceID    string
+	CourseCode  string
+	CourseName  string
+	Type        DeadlineType
+	Phase       Phase
+	Title       string
+	Description string
+	URL         string
+	StartsAt    time.Time // UTC
+	EndsAt      time.Time // UTC
+	Submitted   bool
+	ContentHash string
+}
+
+// Filter descreve o que o usuário não quer na agenda.
+type Filter struct {
+	Courses collections.Set[string] // siglas ou nomes, em maiúsculas
+	Types   collections.Set[DeadlineType]
+	Titles  *regexp.Regexp
+}
+
+type NormalizeOptions struct {
+	Filter          Filter
+	IncludeOpenings bool
+}

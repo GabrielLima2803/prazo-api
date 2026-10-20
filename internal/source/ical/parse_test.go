@@ -1,6 +1,7 @@
 package ical
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -13,15 +14,16 @@ func TestParseFixture(t *testing.T) {
 	}
 	defer f.Close()
 
-	events, skipped, err := Parse(f)
+	feed, err := Parse(f)
 	if err != nil {
 		t.Fatal(err)
 	}
+	events, skipped := feed.Events, feed.Invalid
 	if len(events) != 9 {
 		t.Fatalf("esperava 9 eventos, veio %d", len(events))
 	}
-	if len(skipped) != 1 {
-		t.Fatalf("esperava 1 evento ignorado (sem DTSTART), veio %d", len(skipped))
+	if len(skipped) != 1 || !errors.Is(skipped[0], ErrMissingDTStart) {
+		t.Fatalf("esperava 1 evento sem DTSTART, veio %v", skipped)
 	}
 
 	byUID := make(map[string]Event, len(events))
@@ -87,12 +89,13 @@ func TestParseRealCCTFixture(t *testing.T) {
 	}
 	defer f.Close()
 
-	events, skipped, err := Parse(f)
+	feed, err := Parse(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 12 || len(skipped) != 0 {
-		t.Fatalf("eventos=%d ignorados=%v", len(events), skipped)
+	events := feed.Events
+	if len(events) != 12 || len(feed.Invalid) != 0 {
+		t.Fatalf("eventos=%d inválidos=%v", len(events), feed.Invalid)
 	}
 	byUID := make(map[string]Event, len(events))
 	for _, e := range events {

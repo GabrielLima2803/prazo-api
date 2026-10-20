@@ -1,12 +1,3 @@
-// Package ical lê a exportação iCalendar do Moodle.
-//
-// Biblioteca: github.com/arran4/golang-ical. Escolhida por ser a mais usada
-// no ecossistema Go, mantida ativamente, sem dependências transitivas e
-// tolerante a arquivos "quase RFC 5545" (o Moodle às vezes gera linhas
-// longas e escapes inconsistentes). Ela cuida de line folding, parâmetros
-// e escapes de TEXT; a interpretação de datas fazemos aqui, porque o
-// helper da lib usa time.Local para horários "flutuantes", o que tornaria o
-// resultado dependente da máquina.
 package ical
 
 import (
@@ -19,49 +10,35 @@ import (
 	ics "github.com/arran4/golang-ical"
 )
 
-// Event é um VEVENT cru, sem nenhuma regra de negócio aplicada.
-type Event struct {
-	UID          string
-	Summary      string
-	Description  string
-	Categories   []string
-	Location     string
-	URL          string
-	Start        time.Time // UTC
-	End          time.Time // UTC; igual a Start quando não há DTEND
-	AllDay       bool
-	LastModified time.Time
-	Props        []string // nomes das propriedades presentes (para diagnóstico)
-}
+// Horários sem fuso explícito são interpretados no fuso da UDESC. O Brasil
+// não tem horário de verão desde 2019, então UTC-3 fixo é um fallback seguro.
+var floatingTZ = loadLocation("America/Sao_Paulo", time.FixedZone("-03", -3*60*60))
 
-// floatingTZ é usado para horários sem fuso explícito. O Moodle exporta em
-// UTC ("Z"), mas se um dia vier "flutuante", o fuso da UDESC é o correto.
-// Sem horário de verão desde 2019, então UTC-3 fixo é um fallback seguro.
-var floatingTZ = loadOr("America/Sao_Paulo", time.FixedZone("-03", -3*60*60))
-
-func loadOr(name string, fallback *time.Location) *time.Location {
+func loadLocation(name string, fallback *time.Location) *time.Location {
 	if loc, err := time.LoadLocation(name); err == nil {
 		return loc
 	}
 	return fallback
 }
 
-// Parse lê um calendário iCal e devolve os eventos. Eventos individuais
-// malformados (sem UID ou sem data) são devolvidos em skipped, não abortam.
-func Parse(r io.Reader) (events []Event, skipped []error, err error) {
+// Parse usa golang-ical para line folding, parâmetros e escapes de TEXT. As
+// datas são interpretadas aqui porque a lib usaria time.Local para horários
+// flutuantes, deixando o resultado dependente da máquina.
+func Parse(r io.Reader) (Feed, error) {
 	cal, err := ics.ParseCalendar(r)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse ical: %w", err)
+		return Feed{}, fmt.Errorf("parse ical: %w", err)
 	}
+	var feed Feed
 	for _, ve := range cal.Events() {
 		ev, err := convert(ve)
 		if err != nil {
-			skipped = append(skipped, err)
+			feed.Invalid = append(feed.Invalid, err)
 			continue
 		}
-		events = append(events, ev)
+		feed.Events = append(feed.Events, ev)
 	}
-	return events, skipped, nil
+	return feed, nil
 }
 
 func convert(ve *ics.VEvent) (Event, error) {
@@ -73,7 +50,7 @@ func convert(ve *ics.VEvent) (Event, error) {
 		URL:         prop(ve, ics.ComponentPropertyUrl),
 	}
 	if ev.UID == "" {
-		return Event{}, fmt.Errorf("evento %q sem UID", ev.Summary)
+		return Event{}, fmt.Errorf("%w: %q", ErrMissingUID, ev.Summary)
 	}
 
 	for _, p := range ve.Properties {
@@ -91,16 +68,16 @@ func convert(ve *ics.VEvent) (Event, error) {
 
 	start := ve.GetProperty(ics.ComponentPropertyDtStart)
 	if start == nil {
-		return Event{}, fmt.Errorf("evento %s sem DTSTART", ev.UID)
+		return Event{}, fmt.Errorf("%w: %s", ErrMissingDTStart, ev.UID)
 	}
 	var err error
 	if ev.Start, ev.AllDay, err = parseTime(start.Value, start.ICalParameters); err != nil {
-		return Event{}, fmt.Errorf("evento %s: DTSTART: %w", ev.UID, err)
+		return Event{}, fmt.Errorf("%s: DTSTART: %w", ev.UID, err)
 	}
 	ev.End = ev.Start
 	if end := ve.GetProperty(ics.ComponentPropertyDtEnd); end != nil {
 		if ev.End, _, err = parseTime(end.Value, end.ICalParameters); err != nil {
-			return Event{}, fmt.Errorf("evento %s: DTEND: %w", ev.UID, err)
+			return Event{}, fmt.Errorf("%s: DTEND: %w", ev.UID, err)
 		}
 	}
 	if lm := ve.GetProperty(ics.ComponentPropertyLastModified); lm != nil {
@@ -116,14 +93,12 @@ func prop(ve *ics.VEvent, p ics.ComponentProperty) string {
 	return ""
 }
 
-// parseTime entende os três formatos que aparecem na prática:
-// 20240310T025900Z (UTC), 20240310T235900 com ou sem TZID, e 20240310 (dia inteiro).
+// parseTime aceita UTC (20240310T025900Z), local com ou sem TZID
+// (20240310T235900) e dia inteiro (20240310 / VALUE=DATE).
 func parseTime(v string, params map[string][]string) (t time.Time, allDay bool, err error) {
 	loc := floatingTZ
 	if tz := params["TZID"]; len(tz) == 1 {
-		if l, err := time.LoadLocation(tz[0]); err == nil {
-			loc = l
-		}
+		loc = loadLocation(tz[0], floatingTZ)
 	}
 	isDate := len(params["VALUE"]) == 1 && params["VALUE"][0] == "DATE"
 

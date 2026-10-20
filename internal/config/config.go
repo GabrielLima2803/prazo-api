@@ -1,7 +1,9 @@
-// Package config lê a configuração de variáveis de ambiente (ver .env.example).
+// Package config carrega a configuração das variáveis de ambiente
+// (documentadas em .env.example). Todos os erros são reportados de uma vez.
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -9,85 +11,129 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"prazo/internal/collections"
 	"prazo/internal/domain"
 )
 
-const DefaultMoodleURL = "https://moodle.joinville.udesc.br"
+const (
+	DefaultMoodleURL = "https://moodle.joinville.udesc.br"
+	DefaultTimezone  = "America/Sao_Paulo"
+)
 
 type Config struct {
-	ICalURL     string // segredo: contém authtoken
-	MoodleURL   string
-	MoodleToken string // segredo
-	LogFormat   string // "json" ou "text"
-	LogLevel    slog.Level
-
-	Filter          domain.Filter
-	IncludeOpenings bool
+	Moodle    Moodle
+	Log       Log
+	Normalize domain.NormalizeOptions
+	Location  *time.Location // usado só para exibição
 }
 
-var validTypes = map[domain.DeadlineType]struct{}{
-	domain.TypeAssign: {}, domain.TypeQuiz: {}, domain.TypeForum: {},
-	domain.TypeExam: {}, domain.TypeCourseEvent: {}, domain.TypeOther: {},
+type Moodle struct {
+	BaseURL string
+	ICalURL string // segredo: contém o authtoken
+	Token   string // segredo
 }
 
-func Load() (Config, error) {
-	c := Config{
-		ICalURL:     os.Getenv("PRAZO_ICAL_URL"),
-		MoodleURL:   strings.TrimRight(getenv("PRAZO_MOODLE_URL", DefaultMoodleURL), "/"),
-		MoodleToken: os.Getenv("PRAZO_MOODLE_TOKEN"),
-		LogFormat:   getenv("PRAZO_LOG_FORMAT", "text"),
+type Log struct {
+	Format string // json | text
+	Level  slog.Level
+}
+
+// Load lê o ambiente do processo.
+func Load() (Config, error) { return load(os.Getenv) }
+
+func load(getenv func(string) string) (Config, error) {
+	e := env{get: getenv}
+	cfg := Config{
+		Moodle: Moodle{
+			ICalURL: e.str("PRAZO_ICAL_URL", ""),
+			Token:   e.str("PRAZO_MOODLE_TOKEN", ""),
+		},
+		Log: Log{Format: e.oneOf("PRAZO_LOG_FORMAT", "text", "text", "json")},
 	}
-	if c.LogFormat != "json" && c.LogFormat != "text" {
-		return Config{}, fmt.Errorf("PRAZO_LOG_FORMAT deve ser json ou text, veio %q", c.LogFormat)
+	cfg.Moodle.BaseURL = strings.TrimRight(e.str("PRAZO_MOODLE_URL", baseURLOf(cfg.Moodle.ICalURL)), "/")
+	if cfg.Moodle.ICalURL != "" && baseURLOf(cfg.Moodle.ICalURL) == "" {
+		e.fail("PRAZO_ICAL_URL", errors.New("precisa ser uma URL https://")) // sem ecoar: contém o authtoken
 	}
-	var err error
-	if err = c.LogLevel.UnmarshalText([]byte(getenv("PRAZO_LOG_LEVEL", "info"))); err != nil {
-		return Config{}, fmt.Errorf("PRAZO_LOG_LEVEL: %w", err)
+	if err := cfg.Log.Level.UnmarshalText([]byte(e.str("PRAZO_LOG_LEVEL", "info"))); err != nil {
+		e.fail("PRAZO_LOG_LEVEL", err)
 	}
-	if c.ICalURL != "" {
-		u, err := url.Parse(c.ICalURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" {
-			// Não ecoar o valor: ele contém o authtoken.
-			return Config{}, fmt.Errorf("PRAZO_ICAL_URL inválida (precisa ser https://...)")
-		}
+
+	cfg.Normalize = domain.NormalizeOptions{
+		Filter: domain.Filter{
+			Courses: e.upperSet("PRAZO_IGNORE_COURSES"),
+			Types:   e.typeSet("PRAZO_IGNORE_TYPES"),
+			Titles:  e.regexp("PRAZO_IGNORE_TITLE_REGEX"),
+		},
+		IncludeOpenings: e.bool("PRAZO_INCLUDE_OPENINGS", false),
 	}
-	if c.Filter, err = loadFilter(); err != nil {
+
+	loc, err := time.LoadLocation(e.str("PRAZO_TIMEZONE", DefaultTimezone))
+	if err != nil {
+		e.fail("PRAZO_TIMEZONE", err)
+	}
+	cfg.Location = loc
+
+	if err := errors.Join(e.errs...); err != nil {
 		return Config{}, err
 	}
-	if v := os.Getenv("PRAZO_INCLUDE_OPENINGS"); v != "" {
-		if c.IncludeOpenings, err = strconv.ParseBool(v); err != nil {
-			return Config{}, fmt.Errorf("PRAZO_INCLUDE_OPENINGS: %w", err)
-		}
-	}
-	return c, nil
+	return cfg, nil
 }
 
-func loadFilter() (domain.Filter, error) {
-	f := domain.Filter{Courses: map[string]struct{}{}, Types: map[domain.DeadlineType]struct{}{}}
-	for _, c := range splitList(os.Getenv("PRAZO_IGNORE_COURSES")) {
-		f.Courses[strings.ToUpper(c)] = struct{}{}
+// baseURLOf devolve "https://host" de uma URL https, ou DefaultMoodleURL se raw for vazia.
+func baseURLOf(raw string) string {
+	if raw == "" {
+		return DefaultMoodleURL
 	}
-	for _, t := range splitList(os.Getenv("PRAZO_IGNORE_TYPES")) {
-		typ := domain.DeadlineType(strings.ToLower(t))
-		if _, ok := validTypes[typ]; !ok {
-			return f, fmt.Errorf("PRAZO_IGNORE_TYPES: tipo desconhecido %q", t)
-		}
-		f.Types[typ] = struct{}{}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return ""
 	}
-	if expr := os.Getenv("PRAZO_IGNORE_TITLE_REGEX"); expr != "" {
-		re, err := regexp.Compile(expr)
-		if err != nil {
-			return f, fmt.Errorf("PRAZO_IGNORE_TITLE_REGEX: %w", err)
-		}
-		f.Titles = re
-	}
-	return f, nil
+	return u.Scheme + "://" + u.Host
 }
 
-func splitList(s string) []string {
+type env struct {
+	get  func(string) string
+	errs []error
+}
+
+func (e *env) fail(key string, err error) { e.errs = append(e.errs, fmt.Errorf("%s: %w", key, err)) }
+
+func (e *env) str(key, def string) string {
+	if v := strings.TrimSpace(e.get(key)); v != "" {
+		return v
+	}
+	return def
+}
+
+func (e *env) oneOf(key, def string, allowed ...string) string {
+	v := e.str(key, def)
+	for _, a := range allowed {
+		if v == a {
+			return v
+		}
+	}
+	e.fail(key, fmt.Errorf("valor %q inválido (use %s)", v, strings.Join(allowed, " ou ")))
+	return def
+}
+
+func (e *env) bool(key string, def bool) bool {
+	v := e.str(key, "")
+	if v == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		e.fail(key, err)
+		return def
+	}
+	return b
+}
+
+func (e *env) list(key string) []string {
 	var out []string
-	for p := range strings.SplitSeq(s, ",") {
+	for p := range strings.SplitSeq(e.get(key), ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
@@ -95,9 +141,35 @@ func splitList(s string) []string {
 	return out
 }
 
-func getenv(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
+func (e *env) upperSet(key string) collections.Set[string] {
+	s := collections.Set[string]{}
+	for _, v := range e.list(key) {
+		s.Add(strings.ToUpper(v))
 	}
-	return def
+	return s
+}
+
+func (e *env) typeSet(key string) collections.Set[domain.DeadlineType] {
+	s := collections.Set[domain.DeadlineType]{}
+	for _, v := range e.list(key) {
+		t, err := domain.ParseDeadlineType(v)
+		if err != nil {
+			e.fail(key, err)
+			continue
+		}
+		s.Add(t)
+	}
+	return s
+}
+
+func (e *env) regexp(key string) *regexp.Regexp {
+	expr := e.str(key, "")
+	if expr == "" {
+		return nil
+	}
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		e.fail(key, err)
+	}
+	return re
 }
