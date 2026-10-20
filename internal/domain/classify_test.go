@@ -16,6 +16,7 @@ func TestClassifyTitle(t *testing.T) {
 		{"Término de Questionário Semanal 5", TypeQuiz, PhaseClose, "Questionário Semanal 5"},
 		{"Início de Pesquisa de satisfação", TypeOther, PhaseOpen, "Pesquisa de satisfação"},
 		{"Leitura do capítulo 4 deve estar concluído", TypeOther, PhaseExpect, "Leitura do capítulo 4"},
+		{"Definição de grupo para MVP (Data limite)", TypeOther, PhaseDue, "Definição de grupo para MVP"},
 		{"Lista 3 is due", TypeAssign, PhaseDue, "Lista 3"},
 		{"Quiz 2 closes", TypeQuiz, PhaseClose, "Quiz 2"},
 		{"Semana Acadêmica", TypeOther, PhaseNone, "Semana Acadêmica"},

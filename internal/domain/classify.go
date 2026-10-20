@@ -55,6 +55,8 @@ var titleRules = []titleRule{
 	{name: "assign.due.pt", suffix: " está marcado(a) para esta data", typ: TypeAssign, phase: PhaseDue},
 	{name: "forum.due.pt", suffix: " é devido", typ: TypeForum, phase: PhaseDue},
 	{name: "completion.pt", suffix: " deve estar concluído", typ: TypeOther, phase: PhaseExpect},
+	// mod_groupselect (plugin instalado no Moodle do CCT).
+	{name: "groupselect.due.pt", suffix: " (Data limite)", typ: TypeOther, phase: PhaseDue},
 	{name: "open.pt", prefix: "Início de ", typ: TypeOther, phase: PhaseOpen},
 	{name: "close.pt", prefix: "Término de ", typ: TypeOther, phase: PhaseClose},
 	{name: "open.pt.activity", prefix: "Abrir atividade ", typ: TypeOther, phase: PhaseOpen},
