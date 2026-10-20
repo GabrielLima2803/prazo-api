@@ -77,3 +77,37 @@ func TestParseTimeFormats(t *testing.T) {
 		t.Error("esperava erro para data inválida")
 	}
 }
+
+// Fixture real do Moodle do CCT (anonimizado): dobra de linha com TAB,
+// linhas de continuação vazias e vírgulas escapadas.
+func TestParseRealCCTFixture(t *testing.T) {
+	f, err := os.Open("../../../testdata/moodle_cct_anon.ics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	events, skipped, err := Parse(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 12 || len(skipped) != 0 {
+		t.Fatalf("eventos=%d ignorados=%v", len(events), skipped)
+	}
+	byUID := make(map[string]Event, len(events))
+	for _, e := range events {
+		byUID[e.UID] = e
+	}
+	e := byUID["99677@moodle.joinville.udesc.br"]
+	if want := "Aula Prática 9 - Tratamento de Exceções em Java está marcado(a) para esta data"; e.Summary != want {
+		t.Errorf("Summary = %q", e.Summary)
+	}
+	if want := time.Date(2026, 11, 17, 5, 5, 2, 0, time.UTC); !e.Start.Equal(want) {
+		t.Errorf("Start = %v", e.Start)
+	}
+	for _, e := range events {
+		if e.Summary == "" || e.Start.IsZero() {
+			t.Errorf("evento incompleto: %+v", e)
+		}
+	}
+}

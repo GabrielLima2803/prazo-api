@@ -66,3 +66,24 @@ func TestAnalyzeFixture(t *testing.T) {
 		t.Errorf("relatório sem a tabela de próximos:\n%s", buf.String())
 	}
 }
+
+func TestAnalyzeRealCCTFixture(t *testing.T) {
+	f, err := os.Open("../../testdata/moodle_cct_anon.ics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	events, skipped, err := ical.Parse(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Analyze(events, skipped, time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC), 30*24*time.Hour)
+
+	// Só o evento pessoal (sem CATEGORIES) não tem template do Moodle.
+	if r.Rules["(nenhuma)"] != 1 || r.NoCategory != 1 {
+		t.Errorf("Rules=%v NoCategory=%d", r.Rules, r.NoCategory)
+	}
+	if r.UIDShapes["#@moodle.joinville.udesc.br"] != 12 {
+		t.Errorf("UIDShapes = %v", r.UIDShapes)
+	}
+}
