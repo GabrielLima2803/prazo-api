@@ -40,7 +40,7 @@ Flags úteis:
 |---|---|
 | `-ics arquivo.ics` | lê um arquivo local em vez da URL |
 | `-days 60` | janela da tabela de próximos |
-| `-user SEU_USUARIO` | pede a senha, obtém um token temporário e lista as funções de web service liberadas. Nada é salvo. |
+| `-user SEU_USUARIO` (+ `-password-stdin` para scripts) | pede a senha, obtém um token temporário e lista as funções de web service liberadas. Nada é salvo. |
 | `-skip-ws` | não consulta web services |
 | `-probe-login=false` | não faz o teste de `/login/token.php` |
 
@@ -49,3 +49,27 @@ Flags úteis:
 Se sua conta entra pelo botão "Login via id.udesc/office365", a senha não
 funciona em `/login/token.php`. Isso será tratado na Fase 5; até lá, o iCal
 basta.
+
+## Docker
+
+Build multi-stage com cache do BuildKit (módulos em `/go/pkg/mod` e cache de
+compilação em `/root/.cache/go-build`), então rebuilds só recompilam o que
+mudou. Imagem final distroless (~9 MB), sem shell, usuário não-root 65532.
+
+```sh
+docker build --target test .        # go vet + go test dentro do build
+docker compose build
+docker compose run --rm prazo       # roda o doctor com as variáveis do .env
+```
+
+O compose sobe o container com filesystem somente leitura (exceto o volume
+`/data`, que vai guardar o SQLite), `cap_drop: ALL` e `no-new-privileges`.
+
+## Moodles da UDESC
+
+Cada centro tem a própria instância. Ajuste `PRAZO_MOODLE_URL`:
+
+| centro | URL |
+|---|---|
+| CCT (Joinville) | `https://moodle.joinville.udesc.br` |
+| geral | `https://www.moodle.udesc.br` |
