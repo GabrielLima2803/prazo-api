@@ -4,7 +4,7 @@ Sincroniza prazos, entregas, provas e eventos do Moodle da UDESC com uma agenda
 dedicada no Google Agenda, com título padronizado, cor por disciplina,
 lembretes por tipo e status de entrega.
 
-> Em construção. Fase atual: **0 — Descoberta** (`prazo doctor`).
+> Em construção. Fase atual: **1 — Leitura** (`prazo sync --dry-run`).
 
 ## Requisitos
 
@@ -43,6 +43,31 @@ Flags úteis:
 | `-user SEU_USUARIO` (+ `-password-stdin` para scripts) | pede a senha, obtém um token temporário e lista as funções de web service liberadas. Nada é salvo. |
 | `-skip-ws` | não consulta web services |
 | `-probe-login=false` | não faz o teste de `/login/token.php` |
+
+## Ver os próximos prazos (`prazo sync --dry-run`)
+
+```sh
+go run ./cmd/prazo sync --dry-run            # próximos 30 dias
+go run ./cmd/prazo sync --dry-run -days 60 -links
+```
+
+```
+QUANDO           FALTA   TÍTULO
+qua 21/10 23:59  1d 4h   [EDA] Entrega: UPLOAD da Tarefa-1 FILA DE PRIORIDADE
+qui 22/10 23:59  2d 4h   [POO] Entrega: Aula Prática 8 - Persistência de Dados em Arquivo
+ter 27/10 02:04  6d 6h   [AMS] Atividade: Definição de grupo para MVP
+```
+
+Regras de normalização:
+
+- **Sigla** sai do shortname: `2026/2_CCT_CCI251-03A_POO0002` → `POO`.
+- **Tipo** sai do texto que o Moodle põe no título (o iCal não informa o módulo):
+  "X está marcado(a) para esta data" → entrega; "Início/Término de X" → abertura/fechamento;
+  títulos com "prova"/"exame" viram prova (lembretes de prova).
+- **Uma atividade, um evento**: "Início de X", "Término de X" e "X deve estar concluído"
+  viram só o Término. `PRAZO_INCLUDE_OPENINGS=true` mantém o Início.
+- Prazos de correção (de professor) são descartados.
+- **Filtros**: `PRAZO_IGNORE_COURSES`, `PRAZO_IGNORE_TYPES`, `PRAZO_IGNORE_TITLE_REGEX`.
 
 ### Token via SSO (contas id.udesc / Office 365)
 

@@ -15,7 +15,8 @@ import (
 const usage = `prazo: sincroniza prazos do Moodle com o Google Agenda.
 
 Uso:
-  prazo doctor [flags]   diagnostica a exportação iCal e os web services do Moodle
+  prazo doctor [flags]       diagnostica a exportação iCal e os web services do Moodle
+  prazo sync --dry-run       lê o iCal, normaliza e mostra os próximos prazos
 
 Rode "prazo <comando> -h" para ver as flags.
 `
@@ -39,6 +40,8 @@ func main() {
 	switch os.Args[1] {
 	case "doctor":
 		err = runDoctor(ctx, cfg, log, os.Args[2:])
+	case "sync":
+		err = runSync(ctx, cfg, log, os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return
