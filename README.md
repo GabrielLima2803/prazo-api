@@ -1,100 +1,47 @@
 # Prazo
 
 Sincroniza prazos, entregas, provas e eventos do Moodle da UDESC com uma agenda
-dedicada no Google Agenda, com título padronizado, cor por disciplina,
-lembretes por tipo e status de entrega.
+dedicada no Google Agenda: título padronizado, cor por disciplina, lembretes por
+tipo, filtros e status de entrega.
 
-> Em construção. Fase atual: **1 — Leitura** (`prazo sync --dry-run`).
-
-## Requisitos
-
-- Go 1.25+
-
-## Obter a URL do iCal no Moodle
-
-1. Entre no Moodle → **Calendário** → **Importar ou exportar calendários** → **Exportar calendário**.
-2. Em "Eventos a exportar" escolha **Todos os eventos**; em "Período", **Eventos recentes e próximos**.
-3. Clique em **Obter URL do calendário** e copie a URL.
-
-A URL contém `authtoken`, que dá acesso ao seu calendário sem senha.
-**Trate como senha**: guarde no `.env`, nunca passe como argumento de linha de
-comando (vai para o histórico do shell) e nunca cole em issue/chat.
-
-## Diagnóstico (`prazo doctor`)
-
-```sh
-cp .env.example .env   # preencha PRAZO_ICAL_URL
-set -a; . ./.env; set +a
-go run ./cmd/prazo doctor
-```
-
-O relatório mostra: quantidade de eventos, formato dos UIDs, propriedades iCal
-presentes, disciplinas (`CATEGORIES`), quais regras de título casaram, títulos
-não reconhecidos e uma tabela dos próximos 30 dias. Em seguida consulta a
-configuração pública do Moodle e testa se `/login/token.php` está ativo (com um
-usuário aleatório inexistente, sem credencial real).
-
-Flags úteis:
-
-| flag | o que faz |
-|---|---|
-| `-ics arquivo.ics` | lê um arquivo local em vez da URL |
-| `-days 60` | janela da tabela de próximos |
-| `-user SEU_USUARIO` (+ `-password-stdin` para scripts) | pede a senha, obtém um token temporário e lista as funções de web service liberadas. Nada é salvo. |
-| `-skip-ws` | não consulta web services |
-| `-probe-login=false` | não faz o teste de `/login/token.php` |
-
-## Ver os próximos prazos (`prazo sync --dry-run`)
-
-```sh
-go run ./cmd/prazo sync --dry-run            # próximos 30 dias
-go run ./cmd/prazo sync --dry-run -days 60 -links
-```
+> Em construção. Fases 0 (descoberta) e 1 (leitura) concluídas; a próxima é a
+> integração com o Google. Detalhes em [docs/roadmap.md](docs/roadmap.md).
 
 ```
+$ prazo sync --dry-run
 QUANDO           FALTA   TÍTULO
 qua 21/10 23:59  1d 4h   [EDA] Entrega: UPLOAD da Tarefa-1 FILA DE PRIORIDADE
 qui 22/10 23:59  2d 4h   [POO] Entrega: Aula Prática 8 - Persistência de Dados em Arquivo
 ter 27/10 02:04  6d 6h   [AMS] Atividade: Definição de grupo para MVP
 ```
 
-Regras de normalização:
+## Início rápido
 
-- **Sigla** sai do shortname: `2026/2_CCT_CCI251-03A_POO0002` → `POO`.
-- **Tipo** sai do texto que o Moodle põe no título (o iCal não informa o módulo):
-  "X está marcado(a) para esta data" → entrega; "Início/Término de X" → abertura/fechamento;
-  títulos com "prova"/"exame" viram prova (lembretes de prova).
-- **Uma atividade, um evento**: "Início de X", "Término de X" e "X deve estar concluído"
-  viram só o Término. `PRAZO_INCLUDE_OPENINGS=true` mantém o Início.
-- Prazos de correção (de professor) são descartados.
-- **Filtros**: `PRAZO_IGNORE_COURSES`, `PRAZO_IGNORE_TYPES`, `PRAZO_IGNORE_TITLE_REGEX`.
-
-### Token via SSO (contas id.udesc / Office 365)
-
-Se sua conta entra pelo botão "Login via id.udesc/office365", a senha não
-funciona em `/login/token.php`. Isso será tratado na Fase 5; até lá, o iCal
-basta.
-
-## Docker
-
-Build multi-stage com cache do BuildKit (módulos em `/go/pkg/mod` e cache de
-compilação em `/root/.cache/go-build`), então rebuilds só recompilam o que
-mudou. Imagem final distroless (~9 MB), sem shell, usuário não-root 65532.
+1. No Moodle: **Calendário → Importar ou exportar calendários → Exportar calendário**,
+   "Todos os eventos", "Eventos recentes e próximos", **Obter URL do calendário**.
+   A URL contém um `authtoken`: trate como senha.
+2. Configure e rode:
 
 ```sh
-docker build --target test .        # go vet + go test dentro do build
-docker compose build
-docker compose run --rm prazo       # roda o doctor com as variáveis do .env
+cp .env.example .env          # cole a URL em PRAZO_ICAL_URL
+set -a; . ./.env; set +a
+go run ./cmd/prazo doctor          # diagnóstico
+go run ./cmd/prazo sync --dry-run  # próximos 30 dias
 ```
 
-O compose sobe o container com filesystem somente leitura (exceto o volume
-`/data`, que vai guardar o SQLite), `cap_drop: ALL` e `no-new-privileges`.
+Com Docker:
 
-## Moodles da UDESC
+```sh
+docker compose run --rm prazo
+```
 
-Cada centro tem a própria instância. Ajuste `PRAZO_MOODLE_URL`:
+## Documentação
 
-| centro | URL |
+| | |
 |---|---|
-| CCT (Joinville) | `https://moodle.joinville.udesc.br` |
-| geral | `https://www.moodle.udesc.br` |
+| [Arquitetura](docs/arquitetura.md) | pacotes, dependências, fluxo e tipos centrais |
+| [Moodle da UDESC](docs/moodle-udesc.md) | instâncias, formato do iCal, templates de título |
+| [Decisões](docs/decisoes.md) | o porquê das escolhas técnicas |
+| [Segurança](docs/seguranca.md) | segredos, redação de logs, container |
+| [Desenvolvimento](docs/desenvolvimento.md) | variáveis de ambiente, testes, Docker, convenções |
+| [Roadmap](docs/roadmap.md) | o que foi feito e os próximos passos |
