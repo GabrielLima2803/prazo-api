@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 
 	"prazo/internal/config"
 	"prazo/internal/doctor"
+	"prazo/internal/domain"
 	"prazo/internal/httpx"
 	"prazo/internal/logging"
 	"prazo/internal/source/ical"
@@ -29,6 +31,7 @@ func runDoctor(ctx context.Context, cfg config.Config, log *slog.Logger, args []
 	maxRows := fs.Int("max", 40, "máximo de linhas na tabela de próximos")
 	probe := fs.Bool("probe-login", true, "testar se /login/token.php aceita login (usa um usuário aleatório inexistente)")
 	user := fs.String("user", "", "usuário do Moodle: pede a senha, obtém um token temporário e lista as funções (nada é salvo)")
+	pwStdin := fs.Bool("password-stdin", false, "com -user, lê a senha do stdin (para scripts; ex.: printf %s \"$SENHA\" | prazo doctor -user X -password-stdin)")
 	skipWS := fs.Bool("skip-ws", false, "não consultar os web services")
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() {
@@ -106,7 +109,7 @@ contém o authtoken e ficaria no histórico do shell).
 
 	token := cfg.MoodleToken
 	if token == "" && *user != "" {
-		token, err = loginInteractive(ctx, ws, *user)
+		token, err = login(ctx, ws, *user, *pwStdin)
 		if err != nil {
 			fmt.Fprintf(out, "  ✗ login: %s\n", logging.Redact(err.Error()))
 			if errors.Is(err, webservice.ErrServiceUnavailable) {
@@ -141,18 +144,35 @@ func loadICal(ctx context.Context, cfg config.Config, hc *httpx.Client, log *slo
 	return f.Fetch(ctx)
 }
 
-func loginInteractive(ctx context.Context, ws *webservice.Client, user string) (string, error) {
+// login obtém um token temporário. A senha só existe em memória e é zerada
+// logo após o uso.
+func login(ctx context.Context, ws *webservice.Client, user string, fromStdin bool) (string, error) {
+	pw, err := readPassword(user, fromStdin)
+	if err != nil {
+		return "", err
+	}
+	defer clear(pw)
+	return ws.Login(ctx, user, string(pw))
+}
+
+func readPassword(user string, fromStdin bool) ([]byte, error) {
+	if fromStdin {
+		pw, err := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+		if err != nil {
+			return nil, fmt.Errorf("ler senha do stdin: %w", err)
+		}
+		return bytes.TrimRight(pw, "\r\n"), nil
+	}
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return "", errors.New("-user exige um terminal interativo para digitar a senha")
+		return nil, errors.New("-user exige um terminal interativo (ou use -password-stdin)")
 	}
 	fmt.Fprintf(os.Stderr, "Senha do Moodle para %s (não será salva): ", user)
 	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {
-		return "", fmt.Errorf("ler senha: %w", err)
+		return nil, fmt.Errorf("ler senha: %w", err)
 	}
-	defer clear(pw)
-	return ws.Login(ctx, user, string(pw))
+	return pw, nil
 }
 
 func reportFunctions(ctx context.Context, out io.Writer, ws *webservice.Client, token string) error {
@@ -172,6 +192,22 @@ func reportFunctions(ctx context.Context, out io.Writer, ws *webservice.Client, 
 			mark = "✓"
 		}
 		fmt.Fprintf(out, "    %s %s\n", mark, fn)
+	}
+
+	if _, ok := set["core_enrol_get_users_courses"]; ok {
+		var courses []struct {
+			ShortName string `json:"shortname"`
+			FullName  string `json:"fullname"`
+		}
+		args := url.Values{"userid": {strconv.FormatInt(si.UserID, 10)}}
+		if err := ws.Call(ctx, token, "core_enrol_get_users_courses", args, &courses); err != nil {
+			fmt.Fprintf(out, "  ✗ disciplinas: %s\n", logging.Redact(err.Error()))
+		} else {
+			fmt.Fprintf(out, "\n  disciplinas matriculadas: %d\n", len(courses))
+			for _, c := range courses {
+				fmt.Fprintf(out, "    [%s] %s  (%s)\n", domain.CourseCode(c.ShortName), c.FullName, c.ShortName)
+			}
+		}
 	}
 
 	if _, ok := set["core_calendar_get_action_events_by_timesort"]; ok {
@@ -196,11 +232,8 @@ func reportFunctions(ctx context.Context, out io.Writer, ws *webservice.Client, 
 			fmt.Fprintf(out, "  ✗ action events: %s\n", logging.Redact(err.Error()))
 			return nil
 		}
-		fmt.Fprintf(out, "\n  action events futuros: %d (amostra)\n", len(resp.Events))
-		for i, e := range resp.Events {
-			if i == 10 {
-				break
-			}
+		fmt.Fprintf(out, "\n  action events futuros (ainda não entregues): %d\n", len(resp.Events))
+		for _, e := range resp.Events {
 			fmt.Fprintf(out, "    id=%d mod=%s tipo=%s curso=%s nome=%q\n",
 				e.ID, e.ModuleName, e.EventType, e.Course.ShortName, e.Name)
 		}

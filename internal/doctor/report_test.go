@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata" // não depender do tzdata do sistema (CI/alpine)
 
 	"prazo/internal/source/ical"
 )
@@ -56,7 +57,10 @@ func TestAnalyzeFixture(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	loc, _ := time.LoadLocation("America/Sao_Paulo")
+	loc, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Print(&buf, loc, 0)
 	if !strings.Contains(buf.String(), "Lista 3") {
 		t.Errorf("relatório sem a tabela de próximos:\n%s", buf.String())
