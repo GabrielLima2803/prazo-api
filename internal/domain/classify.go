@@ -80,7 +80,7 @@ var (
 
 // ClassifyTitle interpreta o SUMMARY de um evento do Moodle.
 func ClassifyTitle(summary string) Classification {
-	s := strings.TrimSpace(summary)
+	s := strings.Join(strings.Fields(summary), " ") // espaços duplos/quebras viram um espaço
 	for _, r := range titleRules {
 		if r.prefix != "" && !hasPrefixFold(s, r.prefix) {
 			continue

@@ -24,6 +24,7 @@ func TestClassifyTitle(t *testing.T) {
 		{"TAREFA 4: Integrais Impróprias deve estar concluído", TypeAssign, PhaseExpect, "TAREFA 4: Integrais Impróprias"},
 		{"Prova 1 está marcado(a) para esta data", TypeExam, PhaseDue, "Prova 1"},
 		{"Prova de ALI - P1", TypeExam, PhaseNone, "Prova de ALI - P1"},
+		{"UPLOAD da Tarefa-1  FILA DE PRIORIDADE está marcado(a) para esta data", TypeAssign, PhaseDue, "UPLOAD da Tarefa-1 FILA DE PRIORIDADE"},
 		{"Quiz 2 closes", TypeQuiz, PhaseClose, "Quiz 2"},
 		{"Semana Acadêmica", TypeOther, PhaseNone, "Semana Acadêmica"},
 		{"  Prova substitutiva  ", TypeExam, PhaseNone, "Prova substitutiva"},
