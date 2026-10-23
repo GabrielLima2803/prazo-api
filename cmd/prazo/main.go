@@ -37,6 +37,7 @@ var commands = []command{
 	{"auth", "autoriza o acesso ao Google Agenda", runAuth},
 	{"sync", "sincroniza os prazos com o Google Agenda (--dry-run só mostra)", runSync},
 	{"serve", "API do app e sincronização periódica", runServe},
+	{"healthcheck", "verifica se o serve responde (Docker)", runHealthcheck},
 }
 
 func main() {

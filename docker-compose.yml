@@ -1,33 +1,40 @@
+# Produção: "prazo serve" com a API do app e a sincronização de todos os
+# usuários. O Tailscale Funnel (no host) publica 127.0.0.1:8080 em HTTPS.
+#
+#   docker compose up -d --build
+#   docker compose logs -f
 services:
   prazo:
     build:
       context: .
       target: final
-    image: prazo:dev
+    image: prazo:latest
+    command: ["serve"]
     env_file: .env
     environment:
       PRAZO_LOG_FORMAT: json
+      PRAZO_HTTP_ADDR: 0.0.0.0:8080
       PRAZO_DATA_DIR: /data
-      PRAZO_GOOGLE_CREDENTIALS: /run/secrets/google_oauth
-    secrets:
-      - google_oauth
-    # Fase 2: uma sincronização por execução. Na Fase 4 vira "serve".
-    command: ["sync"]
-    read_only: true          # filesystem somente leitura...
+      PRAZO_GOOGLE_CREDENTIALS: /secrets/google-oauth.json
+      PRAZO_GOOGLE_WEB_CREDENTIALS: /secrets/google-oauth-web.json
+    # Roda com o seu usuário para ler data/ e secrets/ (0600) sem abrir
+    # permissões. No terminal: export UID GID (ou use os padrões 1000:1000).
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - "127.0.0.1:8080:8080"   # só local: quem expõe é o Tailscale Funnel
     volumes:
-      - prazo-data:/data     # ...exceto o volume de dados (token cifrado, estado)
+      - ./data:/data
+      - ./secrets:/secrets:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/prazo", "healthcheck"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 10s
+    read_only: true
     tmpfs:
       - /tmp
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    restart: "no"
-
-# O container roda como UID 65532: o arquivo precisa ser legível por ele
-# (ver docs/desenvolvimento.md).
-secrets:
-  google_oauth:
-    file: ./secrets/google-oauth.json
-
-volumes:
-  prazo-data:

@@ -32,5 +32,6 @@ COPY --from=build /out/prazo /usr/local/bin/prazo
 COPY --from=build --chown=65532:65532 /out/data /data
 USER 65532:65532
 VOLUME ["/data"]
+EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/prazo"]
-CMD ["doctor"]
+CMD ["serve"]
