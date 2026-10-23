@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"prazo/internal/retry"
 )
 
 func New(o Options) *Client {
@@ -39,7 +41,7 @@ func New(o Options) *Client {
 		maxBody:    o.MaxBody,
 		userAgent:  o.UserAgent,
 		sem:        make(chan struct{}, o.Concurrency),
-		sleep:      sleepCtx,
+		sleep:      retry.Sleep,
 	}
 }
 
