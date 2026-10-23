@@ -42,6 +42,32 @@ func TestCollapseKeepsOnlyClose(t *testing.T) {
 	}
 }
 
+func TestCloseOpenMergedIntoInterval(t *testing.T) {
+	open := t0.Add(-2 * time.Hour)
+	in := []Deadline{
+		dl("1", poo, "Prova online", TypeExam, PhaseOpen, open),
+		dl("2", poo, "Prova online", TypeExam, PhaseClose, t0),
+	}
+	for _, includeOpenings := range []bool{false, true} {
+		got := Normalize(in, NormalizeOptions{IncludeOpenings: includeOpenings})
+		if len(got) != 1 || got[0].SourceID != "2" {
+			t.Fatalf("includeOpenings=%v: %+v", includeOpenings, got)
+		}
+		if !got[0].StartsAt.Equal(open) || !got[0].EndsAt.Equal(t0) || got[0].IsInstant() {
+			t.Errorf("intervalo = %v → %v", got[0].StartsAt, got[0].EndsAt)
+		}
+	}
+
+	far := []Deadline{
+		dl("1", poo, "Lista", TypeQuiz, PhaseOpen, t0.Add(-MaxMergedInterval-time.Minute)),
+		dl("2", poo, "Lista", TypeQuiz, PhaseClose, t0),
+	}
+	got := Normalize(far, NormalizeOptions{})
+	if len(got) != 1 || !got[0].IsInstant() || !got[0].StartsAt.Equal(t0) {
+		t.Fatalf("aberto por mais de 12h deveria ficar só o Término: %+v", got)
+	}
+}
+
 func TestExpectDroppedWhenDue(t *testing.T) {
 	in := []Deadline{
 		dl("1", cdi, "Lista 3", TypeAssign, PhaseDue, t0),
@@ -67,6 +93,12 @@ func TestFilter(t *testing.T) {
 	}
 	if got := ids(Normalize(in, NormalizeOptions{Filter: f})); got != "2" {
 		t.Fatalf("ids = %s; quer 2", got)
+	}
+
+	since := Filter{Since: t0}
+	old := []Deadline{dl("antes", poo, "A", TypeAssign, PhaseDue, t0.Add(-time.Second)), dl("no corte", poo, "B", TypeAssign, PhaseDue, t0)}
+	if got := ids(Normalize(old, NormalizeOptions{Filter: since})); got != "no corte" {
+		t.Fatalf("Since: ids = %s", got)
 	}
 }
 

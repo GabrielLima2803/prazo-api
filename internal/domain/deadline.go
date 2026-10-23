@@ -68,6 +68,10 @@ func (d Deadline) ComputeHash() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// IsInstant indica um prazo sem duração (entrega até tal hora), em oposição
+// a um intervalo real (prova das 19h às 21h).
+func (d Deadline) IsInstant() bool { return !d.EndsAt.After(d.StartsAt) }
+
 func hasPrefixFold(s, prefix string) bool {
 	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
 }

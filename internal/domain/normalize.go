@@ -3,6 +3,7 @@ package domain
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"prazo/internal/collections"
 )
@@ -11,6 +12,7 @@ func (f Filter) Skip(d Deadline) bool {
 	return f.Courses.Has(strings.ToUpper(d.CourseCode)) ||
 		f.Courses.Has(strings.ToUpper(d.CourseName)) ||
 		f.Types.Has(d.Type) ||
+		(!f.Since.IsZero() && d.EndsAt.Before(f.Since)) ||
 		(f.Titles != nil && f.Titles.MatchString(d.Title))
 }
 
@@ -41,28 +43,56 @@ func activityKey(d Deadline) string {
 	return d.CourseName + "\x1f" + strings.ToLower(strings.Join(strings.Fields(d.Title), " "))
 }
 
+type activity struct {
+	phases collections.Set[Phase]
+	openAt time.Time
+}
+
+// merged indica que Início e Término estão perto o bastante para virar um
+// único evento com o horário real.
+func (a activity) merged(closeAt time.Time) bool {
+	gap := closeAt.Sub(a.openAt)
+	return a.phases.Has(PhaseOpen) && a.phases.Has(PhaseClose) && gap > 0 && gap <= MaxMergedInterval
+}
+
 // collapseActivities mantém um evento por atividade:
+//   - Início e Término próximos (MaxMergedInterval) viram um intervalo;
 //   - havendo Término, o Início só fica com includeOpenings;
 //   - "conclusão esperada" sai quando há Término ou prazo de entrega;
 //   - Início sem Término (atividade ainda sem fechamento) fica.
 func collapseActivities(in []Deadline, includeOpenings bool) []Deadline {
-	phases := make(map[string]collections.Set[Phase], len(in))
+	acts := make(map[string]*activity, len(in))
+	closeAt := make(map[string]time.Time, len(in))
 	for _, d := range in {
 		k := activityKey(d)
-		if phases[k] == nil {
-			phases[k] = collections.Set[Phase]{}
+		a := acts[k]
+		if a == nil {
+			a = &activity{phases: collections.Set[Phase]{}}
+			acts[k] = a
 		}
-		phases[k].Add(d.Phase)
+		a.phases.Add(d.Phase)
+		switch d.Phase {
+		case PhaseOpen:
+			a.openAt = d.StartsAt
+		case PhaseClose:
+			closeAt[k] = d.StartsAt
+		}
 	}
 
 	out := make([]Deadline, 0, len(in))
 	for _, d := range in {
-		has := phases[activityKey(d)]
+		k := activityKey(d)
+		a := acts[k]
 		switch {
-		case d.Phase == PhaseOpen && has.Has(PhaseClose) && !includeOpenings:
+		case d.Phase == PhaseOpen && a.merged(closeAt[k]):
 			continue
-		case d.Phase == PhaseExpect && (has.Has(PhaseClose) || has.Has(PhaseDue)):
+		case d.Phase == PhaseOpen && a.phases.Has(PhaseClose) && !includeOpenings:
 			continue
+		case d.Phase == PhaseExpect && (a.phases.Has(PhaseClose) || a.phases.Has(PhaseDue)):
+			continue
+		case d.Phase == PhaseClose && a.merged(d.StartsAt):
+			d.EndsAt = d.StartsAt
+			d.StartsAt = a.openAt
 		}
 		out = append(out, d)
 	}

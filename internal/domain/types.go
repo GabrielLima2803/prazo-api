@@ -44,7 +44,7 @@ type Deadline struct {
 	Description string
 	URL         string
 	StartsAt    time.Time // UTC
-	EndsAt      time.Time // UTC
+	EndsAt      time.Time // UTC; igual a StartsAt quando o prazo é um instante
 	Submitted   bool
 	ContentHash string
 }
@@ -54,7 +54,13 @@ type Filter struct {
 	Courses collections.Set[string] // siglas ou nomes, em maiúsculas
 	Types   collections.Set[DeadlineType]
 	Titles  *regexp.Regexp
+	Since   time.Time // prazos que terminam antes disso ficam de fora; zero = sem corte
 }
+
+// MaxMergedInterval é a maior distância entre Início e Término para que os
+// dois virem um único evento com o horário real (ex.: prova online das 19h às
+// 21h). Acima disso, a atividade fica aberta por dias e só o Término importa.
+const MaxMergedInterval = 12 * time.Hour
 
 type NormalizeOptions struct {
 	Filter          Filter
