@@ -1,0 +1,48 @@
+# API do app (`prazo serve`)
+
+JSON sobre HTTP, consumida pelo [prazo-app](https://github.com/GabrielLima2803/prazo-app).
+Todas as rotas em `/api/v1` exigem `Authorization: Bearer <PRAZO_API_TOKEN>`.
+
+```sh
+set -a; . ./.env; set +a
+PRAZO_HTTP_ADDR=0.0.0.0:8080 go run ./cmd/prazo serve
+curl -H "Authorization: Bearer $PRAZO_API_TOKEN" localhost:8080/api/v1/deadlines
+```
+
+O servidor sincroniza ao subir e depois a cada `PRAZO_SYNC_INTERVAL` (±10%).
+Sem autorização do Google, a API funciona do mesmo jeito: o app mostra os
+prazos e avisa que falta o `prazo auth`.
+
+| Rota | Descrição |
+|---|---|
+| `GET /healthz` | público; `{"ok": true}` |
+| `GET /api/v1/status` | Google autorizado?, última execução (contagens e erro), próxima execução |
+| `GET /api/v1/meta` | paleta do Google (colorId → hex) e tipos com os lembretes padrão |
+| `GET /api/v1/deadlines` | todos os prazos normalizados, com cor, lembretes e `hidden` já resolvidos pelas preferências. `?refresh=1` relê o Moodle |
+| `GET /api/v1/courses` | disciplinas com cor, total, pendentes, próximo prazo e se está oculta |
+| `GET /api/v1/preferences` | preferências atuais (coleções vazias, nunca `null`) |
+| `PUT /api/v1/preferences` | substitui as preferências; 422 se inválidas, 400 para JSON desconhecido |
+| `POST /api/v1/sync` | sincroniza agora e devolve o resultado; 409 se já houver uma em andamento |
+
+## Preferências
+
+```json
+{
+  "hiddenCourses": ["CDI"],
+  "hiddenTypes": ["forum"],
+  "courseColors": { "POO": "11" },
+  "reminders": { "assign": [1440, 120], "exam": [] }
+}
+```
+
+- `courseColors`: colorId de 1 a 11 (paleta do Google Agenda).
+- `reminders`: minutos antes do prazo; até 5 por tipo, até 4 semanas. Lista
+  vazia desliga os lembretes daquele tipo; tipo ausente usa o padrão.
+- Ficam cifradas no `PRAZO_DATA_DIR` (`preferences.enc`) e valem tanto para o
+  app quanto para o sync com o Google.
+
+## Cache
+
+`/deadlines` e `/courses` usam o último plano lido por até 5 minutos, para não
+bater no Moodle a cada abertura do app. Se o Moodle estiver fora, a API devolve
+o último plano conhecido.

@@ -19,10 +19,10 @@ Google:
 | 1 | Leitura e normalização (`prazo sync --dry-run`) | ✅ concluída |
 | 2 | Google Agenda (`prazo auth`, `prazo sync`) | 🔄 código pronto; falta o teste com a conta real |
 | 3 | Estado (SQLite), diff e deletes seguros | pendente |
-| 4 | Serviço (`prazo serve`), healthcheck e Docker de produção | pendente |
+| 4 | Serviço (`prazo serve`), healthcheck e Docker de produção | 🔄 `serve` com API e sync periódico; falta Docker de produção |
 | 5 | Web services e status de entrega (✅) | pendente |
 | 6 | Resumos via Telegram | pendente |
-| 7 | App móvel com personalização | planejada |
+| 7 | App móvel com personalização | 🔄 [prazo-app](https://github.com/GabrielLima2803/prazo-app) (Expo) funcionando na rede local |
 
 ## Índice
 
@@ -33,4 +33,5 @@ Google:
 | [decisoes.md](decisoes.md) | registro de decisões técnicas e o porquê de cada uma |
 | [seguranca.md](seguranca.md) | tratamento de segredos, redação de logs, container |
 | [desenvolvimento.md](desenvolvimento.md) | como rodar, testar, construir a imagem e convenções do código |
+| [api.md](api.md) | rotas da API usada pelo app, preferências e cache |
 | [roadmap.md](roadmap.md) | o que foi entregue em cada fase e os próximos passos detalhados |

@@ -38,6 +38,7 @@ flowchart LR
 ```
 cmd/prazo/                 composição: flags, config, dependências; sem regra de negócio
 internal/
+├── api/                   API HTTP do app (stdlib net/http, token Bearer)
 ├── calendar/              Deadline → Event (id, cor, lembretes, janela) e a interface Sink
 │   ├── google/            Sink com a Calendar API; OAuth loopback + PKCE
 │   └── calendartest/      Sink em memória para testes
@@ -51,10 +52,11 @@ internal/
 │   └── webservice/        cliente da API REST e dos endpoints públicos do app
 ├── store/                 interface KV e chaves conhecidas
 │   └── filekv/            KV em arquivos cifrados (0600, escrita atômica)
-├── sync/                  caso de uso: Plan (ler + normalizar) e Sync (aplicar no destino)
+├── sync/                  caso de uso: Plan, Sync e Runner (execuções serializadas, agendamento, cache)
 ├── doctor/                diagnóstico da instância (coleta separada da impressão)
 ├── httpx/                 HTTP com retry, backoff + jitter, limite de concorrência e de corpo
 ├── logging/               slog com redação de segredos
+├── prefs/                 personalização do app (ocultos, cores, lembretes), cifrada no KV
 └── retry/                 backoff exponencial com full jitter (usado por httpx e google)
 testdata/                  fixtures .ics (sintético + real anonimizado do CCT)
 docs/                      esta documentação

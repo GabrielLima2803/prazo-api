@@ -9,6 +9,7 @@
 | senha do Moodle | **em lugar nenhum** | usada só para obter o token, em memória, e zerada logo depois (`clear`) |
 | refresh token do Google | `PRAZO_DATA_DIR/google_token.enc` | AES-256-GCM com a chave `PRAZO_MASTER_KEY`; SQLite na Fase 3 |
 | credencial OAuth (`client_secret`) | `secrets/google-oauth.json` (0600) | ignorada pelo git e pelo build do Docker |
+| `PRAZO_API_TOKEN` | só no ambiente (`.env`) e no Keychain/Keystore do celular | comparado em tempo constante; nunca vai em cookie nem em URL |
 | `PRAZO_MASTER_KEY` | só no ambiente (`.env`, 0600) | nunca no disco de dados nem no repositório |
 
 Regras:
@@ -56,6 +57,17 @@ Há testes para cada um desses caminhos (`logging_test.go` e `client_test.go`).
   em vez de tentar evento por evento.
 - Enquanto o app do Google Cloud estiver em modo **Teste**, o refresh token
   expira em 7 dias. Para uso contínuo, publique o app (modo "Em produção").
+
+## API do app
+
+- Toda rota fora `/healthz` exige o token Bearer; sem ele, 401 sem detalhes.
+- Por padrão escuta só em `127.0.0.1`. Para o celular, `0.0.0.0:8080` na
+  rede local: o tráfego é HTTP puro, então qualquer um na mesma rede Wi-Fi
+  poderia ver o token. Em casa é aceitável; fora dela, use HTTPS (Tailscale
+  ou um proxy com TLS).
+- CORS liberado só para facilitar o desenvolvimento pelo navegador; a
+  proteção real é o token, que não é enviado automaticamente pelo navegador.
+- Corpo do `PUT` limitado a 64 KB, campos desconhecidos rejeitados.
 
 ## Comunicação com o Moodle
 

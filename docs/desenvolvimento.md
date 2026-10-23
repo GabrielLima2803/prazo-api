@@ -20,7 +20,11 @@ go run ./cmd/prazo sync --dry-run -days 60 -links
 go run ./cmd/prazo doctor -ics testdata/moodle_cct_anon.ics -skip-ws   # offline
 go run ./cmd/prazo auth                         # autoriza o Google (uma vez)
 go run ./cmd/prazo sync                         # aplica na agenda
+PRAZO_HTTP_ADDR=0.0.0.0:8080 go run ./cmd/prazo serve   # API do app + sync periódico
 ```
+
+A API está descrita em [api.md](api.md); o app fica no repositório
+[prazo-app](https://github.com/GabrielLima2803/prazo-app).
 
 ## Google Agenda
 
@@ -52,6 +56,9 @@ lugares diferentes (`./data` e o volume `prazo-data`): autorize em cada um.
 | `PRAZO_MASTER_KEY` | (vazio) | 32 bytes em base64 (`prazo keygen`); cifra os segredos em disco. **Segredo.** |
 | `PRAZO_DATA_DIR` | `data` | token cifrado e estado (`/data` no Docker) |
 | `PRAZO_CALENDAR_NAME` | `Prazo — UDESC` | nome da agenda criada no Google |
+| `PRAZO_API_TOKEN` | (vazio) | token do app (32+ caracteres, `prazo keygen`); exigido pelo `serve`. **Segredo.** |
+| `PRAZO_HTTP_ADDR` | `127.0.0.1:8080` | endereço da API; `0.0.0.0:8080` para o celular na rede local |
+| `PRAZO_SYNC_INTERVAL` | `30m` | intervalo da sincronização automática do `serve` (mínimo `1m`) |
 | `PRAZO_SYNC_SINCE` | (vazio) | `AAAA-MM-DD`: ignora prazos anteriores; vazio = tudo o que o Moodle exporta |
 | `PRAZO_IGNORE_COURSES` | (vazio) | siglas ou shortnames a ignorar, separados por vírgula |
 | `PRAZO_IGNORE_TYPES` | (vazio) | `assign`, `quiz`, `forum`, `exam`, `course_event`, `other` |
@@ -89,6 +96,9 @@ compilado com Go 1.26: `go run honnef.co/go/tools/cmd/staticcheck@2026.1 ./...`.
 | `calendar/google` | `httptest.Server` imitando a Calendar API (409, 404, 403 de cota, 429) e o endpoint de token (PKCE, state, escopo) |
 | `crypto`, `store/filekv` | ida e volta, adulteração, chave errada, permissão 0600, segredo nunca em texto plano |
 | `config` | `getenv` injetado (sem `os.Setenv`) |
+| `prefs` | normalização, validação, JSON sem `null`, estilo derivado |
+| `api` | `httptest.Server` com fakes: token, prazos e disciplinas, preferências fluindo até o sync, erros 400/422 |
+| `sync.Runner` | execuções concorrentes (`ErrBusy`), último resultado, cache do plano com a fonte fora |
 | `cmd/prazo` | formatação da tabela e roteamento de comandos |
 
 Testes que dependem de fuso importam `time/tzdata`, para não depender do

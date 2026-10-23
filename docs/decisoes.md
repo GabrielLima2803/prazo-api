@@ -150,3 +150,21 @@ Formato curto: contexto → decisão → consequência.
   credenciais "Aplicativo da Web" (para o servidor) e Android/iOS (para o
   login no app). A credencial de computador continua servindo à linha de
   comando.
+
+## D16. App em Expo, servidor Go como fonte da verdade
+
+- **Contexto:** o usuário quer um app nativo com mais personalização.
+- **Decisão:**
+  - React Native com **Expo SDK 58** (o caminho recomendado pela própria
+    documentação do React Native), em repositório próprio (`prazo-app`);
+  - o servidor Go continua fazendo a sincronização e guarda as preferências;
+    o app é só a interface, via API;
+  - **exceção à regra de versões com duas semanas:** o Expo define um conjunto
+    de versões compatível por SDK (o Expo Go exige isso), e o SDK 58 estável
+    usa o React Native 0.88.0, de 15/10. Usar versões mais antigas significaria
+    um release candidate. As versões ficam travadas no `package-lock.json`.
+- **Consequência:** a sincronização roda mesmo com o celular desligado, e o
+  app funciona em modo demonstração sem servidor. O contrato fica duplicado
+  (`internal/api/types.go` e `src/api/types.ts`); um bug real de contrato
+  (`null` em vez de `[]` nas preferências) foi pego no teste ponta a ponta e
+  virou teste no Go.

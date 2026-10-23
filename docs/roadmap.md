@@ -65,6 +65,17 @@ Código pronto e testado com fakes; falta a primeira execução com a conta real
 Com dados reais: 55 eventos → 41 prazos (40 do semestre 2026/2 e 1 evento
 pessoal de abril).
 
+### App móvel e API 🔄
+
+- `prazo serve`: API REST (ver [api.md](api.md)), sincronização periódica com
+  jitter, uma execução por vez, graceful shutdown e o endereço certo para o
+  celular impresso ao subir.
+- `internal/prefs`: disciplinas e tipos ocultos, cor por disciplina e
+  lembretes por tipo, aplicados tanto no app quanto no sync com o Google.
+- [prazo-app](https://github.com/GabrielLima2803/prazo-app): Expo SDK 58 +
+  TypeScript, Expo Router, React Query, tema claro/escuro, modo demonstração.
+  Testado ponta a ponta contra o servidor com os dados reais.
+
 ## Próximos passos
 
 ### Fase 3: Estado e diff
@@ -138,4 +149,6 @@ celular desligado) e o app é a interface.
 | 3 | Rótulo do `groupselect` | hoje é "Atividade"; talvez "Grupo" |
 | 4 | Atividades com o mesmo nome na mesma disciplina | resolvido na Fase 5 com o id do módulo |
 | 5 | Evento pessoal antigo (abril) entra na agenda | usar `PRAZO_SYNC_SINCE` ou um filtro de eventos pessoais |
-| 6 | Stack do app móvel | a decidir na Fase 7 |
+| 6 | Stack do app móvel | ✅ Expo + React Native (D16) |
+| 7 | Acesso fora da rede local | HTTPS via Tailscale ou proxy com TLS |
+| 8 | Publicar o app (APK/TestFlight) | EAS Build; exige liberar HTTP ou ter HTTPS |
