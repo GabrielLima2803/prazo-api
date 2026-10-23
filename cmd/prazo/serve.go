@@ -12,6 +12,7 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/api"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
@@ -33,19 +34,29 @@ func runServe(ctx context.Context, a *app, args []string) error {
 	}
 	accounts := account.NewService(kv, a.http, a.log, a.cfg.Moodle.ICalURL)
 	runner := sync.NewRunner(a.syncService(accounts), a.target(kv), a.log)
+	deps := api.Deps{
+		Runner:       runner,
+		Accounts:     accounts,
+		Prefs:        prefs.NewStore(kv),
+		Token:        a.cfg.Server.APIToken,
+		CalendarName: a.cfg.Google.CalendarName,
+		GoogleReady: func(ctx context.Context) bool {
+			_, err := google.LoadToken(ctx, kv)
+			return err == nil
+		},
+		Log: a.log,
+	}
+	appAuth, err := a.appAuth(kv)
+	if err != nil {
+		return err
+	}
+	if appAuth != nil {
+		deps.GoogleAuth = appAuth
+		fmt.Fprintf(a.stdout, "Autorização do Google pelo app ativa. URI de redirecionamento: %s\n", appAuth.RedirectURL())
+	}
+
 	srv := &http.Server{
-		Handler: api.New(api.Deps{
-			Runner:       runner,
-			Accounts:     accounts,
-			Prefs:        prefs.NewStore(kv),
-			Token:        a.cfg.Server.APIToken,
-			CalendarName: a.cfg.Google.CalendarName,
-			GoogleReady: func(ctx context.Context) bool {
-				_, err := google.LoadToken(ctx, kv)
-				return err == nil
-			},
-			Log: a.log,
-		}),
+		Handler:           api.New(deps),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      4 * time.Minute, // POST /sync espera a sincronização terminar
@@ -73,6 +84,19 @@ func runServe(ctx context.Context, a *app, args []string) error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdown)
+}
+
+// appAuth devolve nil sem erro quando a autorização pelo app não foi
+// configurada: o servidor funciona, só sem o botão "Conectar Google".
+func (a *app) appAuth(kv store.KV) (*google.AppAuth, error) {
+	if a.cfg.Server.PublicURL == "" || a.cfg.Google.WebCredentialsFile == "" {
+		return nil, nil
+	}
+	cfg, err := a.webOAuthConfig()
+	if err != nil {
+		return nil, err
+	}
+	return google.NewAppAuth(cfg, a.cfg.Server.PublicURL, kv), nil
 }
 
 // reachableURL devolve o endereço pelo qual o celular alcança o servidor na

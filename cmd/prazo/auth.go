@@ -38,7 +38,7 @@ func runAuth(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := google.SaveToken(ctx, kv, tok); err != nil {
+	if err := google.SaveToken(ctx, kv, google.ClientInstalled, tok); err != nil {
 		return fmt.Errorf("guardar token: %w", err)
 	}
 	fmt.Fprintf(a.stdout, "\nAutorizado. Token guardado (cifrado) em %s.\nPróximo passo: prazo sync\n", a.cfg.Storage.DataDir)

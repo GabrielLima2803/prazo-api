@@ -184,3 +184,16 @@ Formato curto: contexto → decisão → consequência.
   (`source.Func`), então trocar de conta no app vale na hora. A senha passa
   pela rede local em HTTP até o servidor, mais um motivo para HTTPS antes de
   usar fora de casa.
+
+## D18. Google pelo app via HTTPS público (Tailscale Funnel)
+
+- **Contexto:** o fluxo de computador devolve para `127.0.0.1`, inalcançável
+  pelo celular. O device flow do Google não aceita escopos de agenda (só
+  Drive, YouTube e login). O login nativo exige sair do Expo Go.
+- **Decisão (escolha do usuário):** fluxo de servidor web com a credencial
+  "Aplicativo da Web" e redirecionamento para `PRAZO_PUBLIC_URL`, um endereço
+  HTTPS fixo do Tailscale Funnel. O app abre o consentimento numa sessão de
+  autenticação do sistema e confirma pelo `/status`.
+- **Consequência:** funciona no Expo Go e, de quebra, o app passa a alcançar o
+  servidor fora de casa por HTTPS. `prazo auth` (credencial de computador)
+  continua valendo para uso só no terminal.

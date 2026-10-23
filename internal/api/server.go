@@ -39,12 +39,17 @@ func New(d Deps) http.Handler {
 	api.HandleFunc("POST /api/v1/moodle/login", s.moodleLogin)
 	api.HandleFunc("POST /api/v1/moodle/ical", s.moodleICal)
 	api.HandleFunc("DELETE /api/v1/moodle", s.deleteMoodle)
+	api.HandleFunc("POST /api/v1/google/auth", s.googleAuth)
+	api.HandleFunc("DELETE /api/v1/google", s.deleteGoogle)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 	mux.Handle("/api/", s.authenticate(api))
+	// Público: quem chega aqui é o navegador vindo do Google; o state prova
+	// que a autorização começou pelo app autenticado.
+	mux.HandleFunc("GET /oauth/google/callback", s.googleCallback)
 	return s.logRequests(cors(mux))
 }
 

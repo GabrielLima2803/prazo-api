@@ -90,12 +90,13 @@ func TestLoadReportsAllErrors(t *testing.T) {
 		"PRAZO_MASTER_KEY":         "c2VncmVkby1jdXJ0bw==",
 		"PRAZO_API_TOKEN":          "curto",
 		"PRAZO_SYNC_INTERVAL":      "10s",
+		"PRAZO_PUBLIC_URL":         "http://192.168.0.14:8080",
 	}))
 	if err == nil {
 		t.Fatal("esperava erro")
 	}
 	msg := err.Error()
-	for _, key := range []string{"PRAZO_IGNORE_TYPES", "PRAZO_IGNORE_TITLE_REGEX", "PRAZO_ICAL_URL", "PRAZO_LOG_FORMAT", "PRAZO_INCLUDE_OPENINGS", "PRAZO_TIMEZONE", "PRAZO_SYNC_SINCE", "PRAZO_MASTER_KEY", "PRAZO_API_TOKEN", "PRAZO_SYNC_INTERVAL"} {
+	for _, key := range []string{"PRAZO_IGNORE_TYPES", "PRAZO_IGNORE_TITLE_REGEX", "PRAZO_ICAL_URL", "PRAZO_LOG_FORMAT", "PRAZO_INCLUDE_OPENINGS", "PRAZO_TIMEZONE", "PRAZO_SYNC_SINCE", "PRAZO_MASTER_KEY", "PRAZO_API_TOKEN", "PRAZO_SYNC_INTERVAL", "PRAZO_PUBLIC_URL"} {
 		if !strings.Contains(msg, key) {
 			t.Errorf("erro não menciona %s:\n%s", key, msg)
 		}

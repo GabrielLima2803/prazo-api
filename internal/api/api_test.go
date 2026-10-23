@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -200,5 +201,73 @@ func TestDeadlinesWithoutMoodle(t *testing.T) {
 	var e errorBody
 	if code := call(t, srv, http.MethodGet, "/api/v1/deadlines", "", &e); code != http.StatusConflict || e.Code != "moodle_not_connected" {
 		t.Fatalf("deadlines sem Moodle: %d %+v", code, e)
+	}
+}
+
+type fakeGoogleAuth struct {
+	finished bool
+}
+
+func (f *fakeGoogleAuth) Start(returnTo string) (string, error) {
+	if strings.HasPrefix(returnTo, "http") {
+		return "", errors.New("returnTo inválido")
+	}
+	return "https://accounts.google.com/o/oauth2/auth?state=s1", nil
+}
+
+func (f *fakeGoogleAuth) Finish(_ context.Context, state, code string) (string, error) {
+	if state != "s1" || code != "c1" {
+		return "", errors.New("autorização expirada")
+	}
+	f.finished = true
+	return "exp://192.168.0.14:8081/--/google", nil
+}
+
+func (f *fakeGoogleAuth) Disconnect(context.Context) error { return nil }
+
+func TestGoogleAppAuth(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	kv := memKV{}
+	accounts := account.NewService(kv, httpx.New(httpx.Options{}), log, "")
+	runner := sync.NewRunner(sync.NewService(accounts.Source(), domain.NormalizeOptions{}), func(context.Context) (sync.Target, error) {
+		return sync.Target{}, errors.New("sem destino no teste")
+	}, log)
+	ga := &fakeGoogleAuth{}
+	srv := httptest.NewServer(New(Deps{Runner: runner, Accounts: accounts, Prefs: prefs.NewStore(kv), Token: token, Log: log,
+		GoogleAuth: ga, GoogleReady: func(context.Context) bool { return ga.finished }}))
+	defer srv.Close()
+
+	var st Status
+	call(t, srv, http.MethodGet, "/api/v1/status", "", &st)
+	if !st.Google.AppAuth || st.Google.Authorized {
+		t.Fatalf("antes: %+v", st.Google)
+	}
+	var auth googleAuthResponse
+	if code := call(t, srv, http.MethodPost, "/api/v1/google/auth", `{"returnTo":"exp://192.168.0.14:8081/--/google"}`, &auth); code != http.StatusOK || auth.AuthURL == "" {
+		t.Fatalf("start: %d %+v", code, auth)
+	}
+
+	resp, err := http.Get(srv.URL + "/oauth/google/callback?state=s1&code=c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `href="exp://192.168.0.14:8081/--/google?google=ok"`) {
+		t.Fatalf("callback: %d\n%s", resp.StatusCode, body)
+	}
+
+	resp, _ = http.Get(srv.URL + "/oauth/google/callback?state=forjado&code=c1")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("state forjado: %d", resp.StatusCode)
+	}
+}
+
+func TestGoogleAppAuthUnavailable(t *testing.T) {
+	srv := newServer(t)
+	var e errorBody
+	if code := call(t, srv, http.MethodPost, "/api/v1/google/auth", `{}`, &e); code != http.StatusNotImplemented || e.Code != "google_app_auth_unavailable" {
+		t.Fatalf("sem configuração: %d %+v", code, e)
 	}
 }

@@ -119,27 +119,51 @@ func callbackHandler(state string, codes chan<- callback) http.Handler {
 	})
 }
 
-func SaveToken(ctx context.Context, kv store.KV, tok *oauth2.Token) error {
-	b, err := json.Marshal(tok)
+// Client identifica qual credencial OAuth emitiu o token: o refresh só
+// funciona com a mesma credencial.
+type Client string
+
+const (
+	ClientInstalled Client = "installed" // "App para computador": prazo auth no terminal
+	ClientWeb       Client = "web"       // "Aplicativo da Web": autorização pelo app
+)
+
+// StoredToken é o que fica cifrado no KV.
+type StoredToken struct {
+	Client Client        `json:"client"`
+	Token  *oauth2.Token `json:"token"`
+}
+
+func SaveToken(ctx context.Context, kv store.KV, client Client, tok *oauth2.Token) error {
+	b, err := json.Marshal(StoredToken{Client: client, Token: tok})
 	if err != nil {
 		return err
 	}
 	return kv.Put(ctx, store.KeyGoogleToken, b)
 }
 
-func LoadToken(ctx context.Context, kv store.KV) (*oauth2.Token, error) {
+// LoadToken aceita também o formato antigo (oauth2.Token puro), gravado pelo
+// "prazo auth" antes de existir a autorização pelo app.
+func LoadToken(ctx context.Context, kv store.KV) (StoredToken, error) {
 	b, err := kv.Get(ctx, store.KeyGoogleToken)
 	if errors.Is(err, store.ErrNotFound) {
-		return nil, ErrNotAuthorized
+		return StoredToken{}, ErrNotAuthorized
 	}
 	if err != nil {
-		return nil, err
+		return StoredToken{}, err
 	}
-	var tok oauth2.Token
-	if err := json.Unmarshal(b, &tok); err != nil {
-		return nil, fmt.Errorf("token do Google corrompido: %w", err)
+	var st StoredToken
+	if err := json.Unmarshal(b, &st); err != nil {
+		return StoredToken{}, fmt.Errorf("token do Google corrompido: %w", err)
 	}
-	return &tok, nil
+	if st.Token == nil {
+		var legacy oauth2.Token
+		if err := json.Unmarshal(b, &legacy); err != nil || legacy.RefreshToken == "" {
+			return StoredToken{}, errors.New("token do Google corrompido")
+		}
+		st = StoredToken{Client: ClientInstalled, Token: &legacy}
+	}
+	return st, nil
 }
 
 // HTTPClient devolve um cliente que injeta e renova o access token. base

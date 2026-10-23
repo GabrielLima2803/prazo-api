@@ -26,6 +26,9 @@ prazos e avisa que falta o `prazo auth`.
 | `GET /api/v1/moodle` | conta conectada (nome, site, método); nunca devolve a URL do iCal nem o token |
 | `POST /api/v1/moodle/login` | `{baseUrl, username, password}` → token de web service → authtoken da exportação → URL do iCal; testa o calendário antes de salvar |
 | `POST /api/v1/moodle/ical` | `{icalUrl}` para contas só com SSO; testa antes de salvar |
+| `POST /api/v1/google/auth` | `{returnTo?}` → `{authUrl}`; 501 `google_app_auth_unavailable` sem `PRAZO_PUBLIC_URL` e credencial web |
+| `DELETE /api/v1/google` | esquece o token do Google |
+| `GET /oauth/google/callback` | **público**: o Google devolve o código aqui; o `state` (uso único, 10 min) prova que a autorização começou no app autenticado |
 | `DELETE /api/v1/moodle` | esquece a conta (volta a `PRAZO_ICAL_URL`, se houver) |
 
 Erros trazem um `code` estável além da mensagem: `moodle_not_connected` (409 em

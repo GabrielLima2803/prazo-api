@@ -39,8 +39,9 @@ type Config struct {
 }
 
 type Google struct {
-	CredentialsFile string // JSON da credencial OAuth "App para computador"
-	CalendarName    string
+	CredentialsFile    string // JSON da credencial OAuth "App para computador" (prazo auth)
+	WebCredentialsFile string // JSON da credencial "Aplicativo da Web" (autorização pelo app)
+	CalendarName       string
 }
 
 type Storage struct {
@@ -56,6 +57,7 @@ type Moodle struct {
 
 type Server struct {
 	Addr         string
+	PublicURL    string // https://… pelo qual o Google e o celular alcançam o servidor
 	APIToken     string // segredo; exigido pelo "prazo serve"
 	SyncInterval time.Duration
 }
@@ -76,12 +78,14 @@ func load(getenv func(string) string) (Config, error) {
 			Token:   e.str("PRAZO_MOODLE_TOKEN", ""),
 		},
 		Google: Google{
-			CredentialsFile: e.str("PRAZO_GOOGLE_CREDENTIALS", ""),
-			CalendarName:    e.str("PRAZO_CALENDAR_NAME", DefaultCalendarName),
+			CredentialsFile:    e.str("PRAZO_GOOGLE_CREDENTIALS", ""),
+			WebCredentialsFile: e.str("PRAZO_GOOGLE_WEB_CREDENTIALS", ""),
+			CalendarName:       e.str("PRAZO_CALENDAR_NAME", DefaultCalendarName),
 		},
 		Storage: Storage{DataDir: e.str("PRAZO_DATA_DIR", DefaultDataDir)},
 		Server: Server{
 			Addr:         e.str("PRAZO_HTTP_ADDR", DefaultHTTPAddr),
+			PublicURL:    strings.TrimRight(e.str("PRAZO_PUBLIC_URL", ""), "/"),
 			APIToken:     e.str("PRAZO_API_TOKEN", ""),
 			SyncInterval: e.duration("PRAZO_SYNC_INTERVAL", DefaultSyncInterval),
 		},
@@ -89,6 +93,9 @@ func load(getenv func(string) string) (Config, error) {
 	}
 	if t := cfg.Server.APIToken; t != "" && len(t) < MinAPITokenLen {
 		e.fail("PRAZO_API_TOKEN", fmt.Errorf("use pelo menos %d caracteres (gere com \"prazo keygen\")", MinAPITokenLen))
+	}
+	if u := cfg.Server.PublicURL; u != "" && !strings.HasPrefix(u, "https://") {
+		e.fail("PRAZO_PUBLIC_URL", errors.New("precisa ser https:// (o Google não aceita retorno em http fora do localhost)"))
 	}
 	if cfg.Server.SyncInterval < time.Minute {
 		e.fail("PRAZO_SYNC_INTERVAL", errors.New("o mínimo é 1m, para não sobrecarregar o Moodle"))

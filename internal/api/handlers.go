@@ -19,7 +19,7 @@ import (
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
 	st := Status{
 		Now:    time.Now().UTC(),
-		Google: Google{Authorized: s.GoogleReady(r.Context()), CalendarName: s.CalendarName},
+		Google: Google{Authorized: s.GoogleReady(r.Context()), CalendarName: s.CalendarName, AppAuth: s.GoogleAuth != nil},
 	}
 	if last, ok := s.Runner.Last(); ok {
 		run := toRun(last)

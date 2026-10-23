@@ -42,6 +42,27 @@ A API está descrita em [api.md](api.md); o app fica no repositório
 6. `prazo sync`: cria a agenda **"Prazo — UDESC"** e envia os prazos. Pode
    repetir à vontade: nada é duplicado.
 
+### Autorizar o Google pelo app (Tailscale)
+
+O Google só devolve a autorização para `localhost` ou para um endereço HTTPS
+público. O Tailscale Funnel dá um endereço HTTPS fixo e gratuito ao servidor:
+
+```sh
+sudo dnf install tailscale
+sudo systemctl enable --now tailscaled
+sudo tailscale up                       # login no navegador
+sudo tailscale funnel --bg 8080         # → https://<máquina>.<tailnet>.ts.net
+```
+
+1. No Google Cloud, crie uma credencial **"Aplicativo da Web"** com o URI de
+   redirecionamento `https://<máquina>.<tailnet>.ts.net/oauth/google/callback`
+   e salve o JSON em `secrets/google-oauth-web.json`.
+2. No `.env`: `PRAZO_PUBLIC_URL=https://<máquina>.<tailnet>.ts.net` e
+   `PRAZO_HTTP_ADDR=127.0.0.1:8080` (o Funnel faz o proxy; nada fica exposto
+   em HTTP na rede).
+3. `prazo serve` mostra o URI de redirecionamento ao subir; no app, use o
+   endereço HTTPS e toque em **Conectar Google Agenda**.
+
 O token fica cifrado em `PRAZO_DATA_DIR`. Rodando local e no Docker, são dois
 lugares diferentes (`./data` e o volume `prazo-data`): autorize em cada um.
 
@@ -59,6 +80,8 @@ lugares diferentes (`./data` e o volume `prazo-data`): autorize em cada um.
 | `PRAZO_API_TOKEN` | (vazio) | token do app (32+ caracteres, `prazo keygen`); exigido pelo `serve`. **Segredo.** |
 | `PRAZO_HTTP_ADDR` | `127.0.0.1:8080` | endereço da API; `0.0.0.0:8080` para o celular na rede local |
 | `PRAZO_SYNC_INTERVAL` | `30m` | intervalo da sincronização automática do `serve` (mínimo `1m`) |
+| `PRAZO_PUBLIC_URL` | (vazio) | `https://…` público do servidor; ativa a autorização do Google pelo app |
+| `PRAZO_GOOGLE_WEB_CREDENTIALS` | (vazio) | JSON da credencial "Aplicativo da Web" |
 | `PRAZO_SYNC_SINCE` | (vazio) | `AAAA-MM-DD`: ignora prazos anteriores; vazio = tudo o que o Moodle exporta |
 | `PRAZO_IGNORE_COURSES` | (vazio) | siglas ou shortnames a ignorar, separados por vírgula |
 | `PRAZO_IGNORE_TYPES` | (vazio) | `assign`, `quiz`, `forum`, `exam`, `course_event`, `other` |

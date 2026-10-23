@@ -68,6 +68,14 @@ Há testes para cada um desses caminhos (`logging_test.go` e `client_test.go`).
 - CORS liberado só para facilitar o desenvolvimento pelo navegador; a
   proteção real é o token, que não é enviado automaticamente pelo navegador.
 - Corpo do `PUT` limitado a 64 KB, campos desconhecidos rejeitados.
+- Com o Tailscale Funnel, a API fica na internet por HTTPS. Continua exigindo
+  o token (32+ bytes aleatórios); só `/healthz` e o callback do OAuth são
+  públicos.
+- Callback do Google: `state` aleatório de uso único com validade de 10 min,
+  PKCE S256 e escopo conferido. O retorno ao app só aceita esquemas de app
+  (`exp://`, `prazo://`), nunca `http(s)`, para não virar redirecionador aberto.
+- O token guarda qual credencial o emitiu (`installed` ou `web`), porque o
+  refresh só funciona com a mesma credencial.
 
 ## Comunicação com o Moodle
 

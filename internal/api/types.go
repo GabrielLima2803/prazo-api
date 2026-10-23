@@ -21,6 +21,9 @@ type Deps struct {
 	CalendarName string
 	// GoogleReady diz se já existe autorização do Google guardada.
 	GoogleReady func(ctx context.Context) bool
+	// GoogleAuth é nil quando a autorização pelo app não foi configurada
+	// (falta PRAZO_PUBLIC_URL ou a credencial web).
+	GoogleAuth  GoogleAuth
 	Log         *slog.Logger
 	PlanMaxAge  time.Duration
 	SyncTimeout time.Duration
@@ -73,6 +76,23 @@ type Status struct {
 type Google struct {
 	Authorized   bool   `json:"authorized"`
 	CalendarName string `json:"calendarName"`
+	// AppAuth diz se o app pode iniciar a autorização (botão "Conectar Google").
+	AppAuth bool `json:"appAuth"`
+}
+
+// GoogleAuth inicia e conclui a autorização do Google começada no app.
+type GoogleAuth interface {
+	Start(returnTo string) (authURL string, err error)
+	Finish(ctx context.Context, state, code string) (returnTo string, err error)
+	Disconnect(ctx context.Context) error
+}
+
+type googleAuthRequest struct {
+	ReturnTo string `json:"returnTo"`
+}
+
+type googleAuthResponse struct {
+	AuthURL string `json:"authUrl"`
 }
 
 type Run struct {

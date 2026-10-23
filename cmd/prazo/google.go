@@ -68,14 +68,31 @@ func (a *app) calendarSpec() calendar.Spec {
 	}
 }
 
+// webOAuthConfig é a credencial "Aplicativo da Web"; nil, nil quando a
+// autorização pelo app não foi configurada.
+func (a *app) webOAuthConfig() (*oauth2.Config, error) {
+	if a.cfg.Google.WebCredentialsFile == "" {
+		return nil, nil
+	}
+	return google.LoadConfig(a.cfg.Google.WebCredentialsFile)
+}
+
+// googleSink renova o token com a mesma credencial que o emitiu.
 func (a *app) googleSink(ctx context.Context, kv *filekv.Store) (*google.Sink, error) {
-	cfg, err := a.oauthConfig()
+	st, err := google.LoadToken(ctx, kv)
 	if err != nil {
 		return nil, err
 	}
-	tok, err := google.LoadToken(ctx, kv)
+	var cfg *oauth2.Config
+	if st.Client == google.ClientWeb {
+		if cfg, err = a.webOAuthConfig(); err == nil && cfg == nil {
+			err = errors.New("o token veio da autorização pelo app: defina PRAZO_GOOGLE_WEB_CREDENTIALS")
+		}
+	} else {
+		cfg, err = a.oauthConfig()
+	}
 	if err != nil {
 		return nil, err
 	}
-	return google.NewSink(ctx, google.HTTPClient(ctx, cfg, tok, googleHTTP))
+	return google.NewSink(ctx, google.HTTPClient(ctx, cfg, st.Token, googleHTTP))
 }
