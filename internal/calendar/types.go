@@ -5,6 +5,8 @@ package calendar
 import (
 	"context"
 	"time"
+
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 // Spec descreve a agenda dedicada que o Prazo cria e mantém.
@@ -12,6 +14,13 @@ type Spec struct {
 	Summary     string
 	Description string
 	TimeZone    string // IANA, ex.: America/Sao_Paulo
+}
+
+// Style são as personalizações do usuário sobre o padrão: cor por disciplina
+// e lembretes por tipo. Mapas vazios ou nil mantêm o padrão.
+type Style struct {
+	Colors    map[string]string // sigla (maiúsculas) → colorId 1–11
+	Reminders map[domain.DeadlineType][]time.Duration
 }
 
 // Event é o evento já pronto para o destino, independente de provedor.

@@ -25,14 +25,18 @@ var typeLabels = map[DeadlineType]string{
 	TypeOther:       "Atividade",
 }
 
+func (t DeadlineType) Label() string {
+	if l, ok := typeLabels[t]; ok {
+		return l
+	}
+	return typeLabels[TypeOther]
+}
+
 func (d Deadline) Label() string {
 	if d.Phase == PhaseOpen {
 		return "Abertura"
 	}
-	if l, ok := typeLabels[d.Type]; ok {
-		return l
-	}
-	return typeLabels[TypeOther]
+	return d.Type.Label()
 }
 
 // DisplayTitle monta "[SIGLA] Tipo: Título". O rótulo é omitido quando o

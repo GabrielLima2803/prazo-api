@@ -18,4 +18,5 @@ type KV interface {
 const (
 	KeyGoogleToken    = "google_token"
 	KeyGoogleCalendar = "google_calendar_id"
+	KeyPreferences    = "preferences"
 )

@@ -20,7 +20,10 @@ const (
 	TypeOther       DeadlineType = "other"
 )
 
-var deadlineTypes = collections.NewSet(TypeAssign, TypeQuiz, TypeForum, TypeExam, TypeCourseEvent, TypeOther)
+// DeadlineTypes lista os tipos na ordem de exibição.
+var DeadlineTypes = []DeadlineType{TypeAssign, TypeExam, TypeQuiz, TypeForum, TypeCourseEvent, TypeOther}
+
+var deadlineTypes = collections.NewSet(DeadlineTypes...)
 
 // Phase é o momento da atividade que o evento representa.
 type Phase string

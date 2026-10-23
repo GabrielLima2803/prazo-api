@@ -25,9 +25,14 @@ func (s *Service) Sync(ctx context.Context, t Target) (Report, error) {
 		return r, err
 	}
 
+	style := t.Prefs.Style()
 	var errs []error
 	for _, d := range plan.Deadlines {
-		outcome, err := t.Sink.Upsert(ctx, r.CalendarID, calendar.FromDeadline(d, t.Calendar.TimeZone))
+		if t.Prefs.Hides(d) {
+			r.Hidden++
+			continue
+		}
+		outcome, err := t.Sink.Upsert(ctx, r.CalendarID, calendar.FromDeadline(d, t.Calendar.TimeZone, style))
 		switch {
 		case err == nil && outcome == calendar.Created:
 			r.Created++

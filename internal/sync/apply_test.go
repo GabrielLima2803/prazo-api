@@ -9,6 +9,7 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/calendartest"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
@@ -102,5 +103,15 @@ func TestSyncSourceErrorWritesNothing(t *testing.T) {
 	_, err := NewService(fakeSource{err: errors.New("moodle fora")}, domain.NormalizeOptions{}).Sync(context.Background(), target(sink, memKV{}))
 	if err == nil || sink.Upserts != 0 {
 		t.Fatalf("err = %v, upserts = %d", err, sink.Upserts)
+	}
+}
+
+func TestSyncAppliesPreferences(t *testing.T) {
+	sink := calendartest.New()
+	tg := target(sink, memKV{})
+	tg.Prefs = prefs.Preferences{HiddenTypes: []domain.DeadlineType{domain.TypeExam}}
+	r, err := NewService(threeDeadlines(), domain.NormalizeOptions{}).Sync(context.Background(), tg)
+	if err != nil || r.Created != 2 || r.Hidden != 1 {
+		t.Fatalf("report = %+v, err = %v", r, err)
 	}
 }

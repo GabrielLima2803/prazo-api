@@ -6,6 +6,7 @@ import (
 
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/source"
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
@@ -28,6 +29,7 @@ type Target struct {
 	Sink     calendar.Sink
 	State    store.KV // guarda o id da agenda entre execuções
 	Calendar calendar.Spec
+	Prefs    prefs.Preferences
 }
 
 type Report struct {
@@ -35,6 +37,7 @@ type Report struct {
 	CalendarID string
 	Created    int
 	Updated    int
+	Hidden     int // ocultos pelas preferências; não enviados
 	Failed     int
 	Err        error // falhas individuais (errors.Join); a execução seguiu
 }

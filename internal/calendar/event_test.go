@@ -46,7 +46,7 @@ func TestColorIDStable(t *testing.T) {
 }
 
 func TestInstantEndsAtDeadline(t *testing.T) {
-	e := FromDeadline(deadline(), "America/Sao_Paulo")
+	e := FromDeadline(deadline(), "America/Sao_Paulo", Style{})
 	if !e.End.Equal(due) || e.End.Sub(e.Start) != InstantDuration {
 		t.Fatalf("janela = %v → %v", e.Start, e.End)
 	}
@@ -65,7 +65,7 @@ func TestIntervalKeepsRealTime(t *testing.T) {
 	d := deadline()
 	d.Type = domain.TypeExam
 	d.StartsAt = due.Add(-2 * time.Hour)
-	e := FromDeadline(d, "America/Sao_Paulo")
+	e := FromDeadline(d, "America/Sao_Paulo", Style{})
 	if !e.Start.Equal(d.StartsAt) || !e.End.Equal(due) || !e.Busy {
 		t.Fatalf("evento = %+v", e)
 	}
@@ -77,7 +77,28 @@ func TestIntervalKeepsRealTime(t *testing.T) {
 func TestSubmittedHasNoReminders(t *testing.T) {
 	d := deadline()
 	d.Submitted = true
-	if e := FromDeadline(d, ""); e.Reminders != nil || !strings.HasPrefix(e.Summary, "✅") {
+	if e := FromDeadline(d, "", Style{}); e.Reminders != nil || !strings.HasPrefix(e.Summary, "✅") {
 		t.Fatalf("evento = %+v", e)
+	}
+}
+
+func TestStyleOverrides(t *testing.T) {
+	style := Style{
+		Colors:    map[string]string{"CDI": "11"},
+		Reminders: map[domain.DeadlineType][]time.Duration{domain.TypeAssign: {}},
+	}
+	e := FromDeadline(deadline(), "", style)
+	if e.ColorID != "11" || len(e.Reminders) != 0 {
+		t.Fatalf("estilo ignorado: cor %q, lembretes %v", e.ColorID, e.Reminders)
+	}
+	d := deadline()
+	d.Type = domain.TypeExam
+	if e := FromDeadline(d, "", style); len(e.Reminders) != 2 {
+		t.Errorf("tipo sem personalização deveria manter o padrão: %v", e.Reminders)
+	}
+	for id := range Palette {
+		if _, ok := Palette[ColorID("X"+id)]; !ok {
+			t.Fatalf("ColorID fora da paleta")
+		}
 	}
 }
