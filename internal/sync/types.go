@@ -4,8 +4,10 @@ package sync
 import (
 	"time"
 
+	"prazo/internal/calendar"
 	"prazo/internal/domain"
 	"prazo/internal/source"
+	"prazo/internal/store"
 )
 
 type Service struct {
@@ -19,4 +21,20 @@ type Plan struct {
 	Deadlines []domain.Deadline // normalizados e ordenados por data
 	Fetched   int               // itens brutos recebidos da fonte
 	At        time.Time
+}
+
+// Target é o destino de uma sincronização.
+type Target struct {
+	Sink     calendar.Sink
+	State    store.KV // guarda o id da agenda entre execuções
+	Calendar calendar.Spec
+}
+
+type Report struct {
+	Plan       Plan
+	CalendarID string
+	Created    int
+	Updated    int
+	Failed     int
+	Err        error // falhas individuais (errors.Join); a execução seguiu
 }

@@ -14,19 +14,34 @@ import (
 	"time"
 
 	"prazo/internal/collections"
+	"prazo/internal/crypto"
 	"prazo/internal/domain"
 )
 
 const (
-	DefaultMoodleURL = "https://moodle.joinville.udesc.br"
-	DefaultTimezone  = "America/Sao_Paulo"
+	DefaultMoodleURL    = "https://moodle.joinville.udesc.br"
+	DefaultTimezone     = "America/Sao_Paulo"
+	DefaultCalendarName = "Prazo — UDESC"
+	DefaultDataDir      = "data"
 )
 
 type Config struct {
 	Moodle    Moodle
+	Google    Google
+	Storage   Storage
 	Log       Log
 	Normalize domain.NormalizeOptions
-	Location  *time.Location // usado só para exibição
+	Location  *time.Location // fuso de exibição e dos eventos na agenda
+}
+
+type Google struct {
+	CredentialsFile string // JSON da credencial OAuth "App para computador"
+	CalendarName    string
+}
+
+type Storage struct {
+	DataDir   string
+	MasterKey []byte // segredo; nil quando PRAZO_MASTER_KEY não foi definida
 }
 
 type Moodle struct {
@@ -50,7 +65,19 @@ func load(getenv func(string) string) (Config, error) {
 			ICalURL: e.str("PRAZO_ICAL_URL", ""),
 			Token:   e.str("PRAZO_MOODLE_TOKEN", ""),
 		},
-		Log: Log{Format: e.oneOf("PRAZO_LOG_FORMAT", "text", "text", "json")},
+		Google: Google{
+			CredentialsFile: e.str("PRAZO_GOOGLE_CREDENTIALS", ""),
+			CalendarName:    e.str("PRAZO_CALENDAR_NAME", DefaultCalendarName),
+		},
+		Storage: Storage{DataDir: e.str("PRAZO_DATA_DIR", DefaultDataDir)},
+		Log:     Log{Format: e.oneOf("PRAZO_LOG_FORMAT", "text", "text", "json")},
+	}
+	if raw := e.str("PRAZO_MASTER_KEY", ""); raw != "" {
+		key, err := crypto.ParseKey(raw)
+		if err != nil {
+			e.fail("PRAZO_MASTER_KEY", err) // sem ecoar o valor
+		}
+		cfg.Storage.MasterKey = key
 	}
 	cfg.Moodle.BaseURL = strings.TrimRight(e.str("PRAZO_MOODLE_URL", baseURLOf(cfg.Moodle.ICalURL)), "/")
 	if cfg.Moodle.ICalURL != "" && baseURLOf(cfg.Moodle.ICalURL) == "" {
@@ -60,20 +87,22 @@ func load(getenv func(string) string) (Config, error) {
 		e.fail("PRAZO_LOG_LEVEL", err)
 	}
 
+	loc, err := time.LoadLocation(e.str("PRAZO_TIMEZONE", DefaultTimezone))
+	if err != nil {
+		e.fail("PRAZO_TIMEZONE", err)
+		loc = time.UTC
+	}
+	cfg.Location = loc
+
 	cfg.Normalize = domain.NormalizeOptions{
 		Filter: domain.Filter{
 			Courses: e.upperSet("PRAZO_IGNORE_COURSES"),
 			Types:   e.typeSet("PRAZO_IGNORE_TYPES"),
 			Titles:  e.regexp("PRAZO_IGNORE_TITLE_REGEX"),
+			Since:   e.date("PRAZO_SYNC_SINCE", loc),
 		},
 		IncludeOpenings: e.bool("PRAZO_INCLUDE_OPENINGS", false),
 	}
-
-	loc, err := time.LoadLocation(e.str("PRAZO_TIMEZONE", DefaultTimezone))
-	if err != nil {
-		e.fail("PRAZO_TIMEZONE", err)
-	}
-	cfg.Location = loc
 
 	if err := errors.Join(e.errs...); err != nil {
 		return Config{}, err
@@ -160,6 +189,19 @@ func (e *env) typeSet(key string) collections.Set[domain.DeadlineType] {
 		s.Add(t)
 	}
 	return s
+}
+
+// date lê AAAA-MM-DD como meia-noite no fuso loc.
+func (e *env) date(key string, loc *time.Location) time.Time {
+	v := e.str(key, "")
+	if v == "" {
+		return time.Time{}
+	}
+	t, err := time.ParseInLocation(time.DateOnly, v, loc)
+	if err != nil {
+		e.fail(key, fmt.Errorf("use o formato AAAA-MM-DD: %w", err))
+	}
+	return t.UTC()
 }
 
 func (e *env) regexp(key string) *regexp.Regexp {

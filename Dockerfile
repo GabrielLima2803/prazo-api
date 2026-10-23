@@ -4,7 +4,7 @@
 #   - /root/.cache/go-build → cache de compilação (rebuild incremental)
 # Os caches ficam no builder, fora das camadas da imagem.
 
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26
 
 FROM golang:${GO_VERSION}-alpine AS deps
 WORKDIR /src

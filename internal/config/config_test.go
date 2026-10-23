@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 	_ "time/tzdata"
 
 	"prazo/internal/domain"
@@ -19,6 +20,30 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.Moodle.BaseURL != DefaultMoodleURL || cfg.Log.Format != "text" || cfg.Location.String() != DefaultTimezone {
 		t.Errorf("cfg = %+v", cfg)
+	}
+	if cfg.Google.CalendarName != DefaultCalendarName || cfg.Storage.DataDir != DefaultDataDir || cfg.Storage.MasterKey != nil {
+		t.Errorf("google/storage = %+v %+v", cfg.Google, cfg.Storage)
+	}
+	if !cfg.Normalize.Filter.Since.IsZero() {
+		t.Error("sem PRAZO_SYNC_SINCE não deveria haver corte")
+	}
+}
+
+func TestLoadGoogleAndStorage(t *testing.T) {
+	cfg, err := load(envFrom(map[string]string{
+		"PRAZO_MASTER_KEY":         "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"PRAZO_GOOGLE_CREDENTIALS": "/run/secrets/google.json",
+		"PRAZO_DATA_DIR":           "/data",
+		"PRAZO_SYNC_SINCE":         "2026-08-01",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Storage.MasterKey) != 32 || cfg.Storage.DataDir != "/data" || cfg.Google.CredentialsFile != "/run/secrets/google.json" {
+		t.Errorf("cfg = %+v %+v", cfg.Google, cfg.Storage)
+	}
+	if want := time.Date(2026, 8, 1, 3, 0, 0, 0, time.UTC); !cfg.Normalize.Filter.Since.Equal(want) {
+		t.Errorf("Since = %v; quer %v (meia-noite em São Paulo)", cfg.Normalize.Filter.Since, want)
 	}
 }
 
@@ -61,17 +86,19 @@ func TestLoadReportsAllErrors(t *testing.T) {
 		"PRAZO_LOG_FORMAT":         "xml",
 		"PRAZO_INCLUDE_OPENINGS":   "talvez",
 		"PRAZO_TIMEZONE":           "Marte/Olympus",
+		"PRAZO_SYNC_SINCE":         "01/08/2026",
+		"PRAZO_MASTER_KEY":         "c2VncmVkby1jdXJ0bw==",
 	}))
 	if err == nil {
 		t.Fatal("esperava erro")
 	}
 	msg := err.Error()
-	for _, key := range []string{"PRAZO_IGNORE_TYPES", "PRAZO_IGNORE_TITLE_REGEX", "PRAZO_ICAL_URL", "PRAZO_LOG_FORMAT", "PRAZO_INCLUDE_OPENINGS", "PRAZO_TIMEZONE"} {
+	for _, key := range []string{"PRAZO_IGNORE_TYPES", "PRAZO_IGNORE_TITLE_REGEX", "PRAZO_ICAL_URL", "PRAZO_LOG_FORMAT", "PRAZO_INCLUDE_OPENINGS", "PRAZO_TIMEZONE", "PRAZO_SYNC_SINCE", "PRAZO_MASTER_KEY"} {
 		if !strings.Contains(msg, key) {
 			t.Errorf("erro não menciona %s:\n%s", key, msg)
 		}
 	}
-	if strings.Contains(msg, "SEGREDO") {
+	if strings.Contains(msg, "SEGREDO") || strings.Contains(msg, "c2VncmVkby1jdXJ0bw") {
 		t.Error("o erro não pode ecoar a URL do iCal")
 	}
 }

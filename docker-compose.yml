@@ -7,17 +7,27 @@ services:
     env_file: .env
     environment:
       PRAZO_LOG_FORMAT: json
-    # Fase 1: dry-run. Na Fase 4 vira "serve".
-    command: ["sync", "--dry-run"]
+      PRAZO_DATA_DIR: /data
+      PRAZO_GOOGLE_CREDENTIALS: /run/secrets/google_oauth
+    secrets:
+      - google_oauth
+    # Fase 2: uma sincronização por execução. Na Fase 4 vira "serve".
+    command: ["sync"]
     read_only: true          # filesystem somente leitura...
     volumes:
-      - prazo-data:/data     # ...exceto o volume do SQLite
+      - prazo-data:/data     # ...exceto o volume de dados (token cifrado, estado)
     tmpfs:
       - /tmp
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
     restart: "no"
+
+# O container roda como UID 65532: o arquivo precisa ser legível por ele
+# (ver docs/desenvolvimento.md).
+secrets:
+  google_oauth:
+    file: ./secrets/google-oauth.json
 
 volumes:
   prazo-data:
