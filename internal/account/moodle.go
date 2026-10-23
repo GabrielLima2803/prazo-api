@@ -80,6 +80,9 @@ func (s *Service) ConnectWithLogin(ctx context.Context, baseURL, username, passw
 	if err != nil {
 		return Moodle{}, 0, fmt.Errorf("dados do usuário: %w", err)
 	}
+	if err := s.checkOwner(ctx, base, info.UserID); err != nil {
+		return Moodle{}, 0, err
+	}
 	if !info.FunctionSet().Has("core_calendar_get_calendar_export_token") {
 		return Moodle{}, 0, ErrExportUnavailable
 	}
@@ -102,11 +105,66 @@ func (s *Service) ConnectWithLogin(ctx context.Context, baseURL, username, passw
 // ConnectWithICal salva uma URL de exportação colada pelo usuário, depois de
 // conferir que ela devolve um calendário.
 func (s *Service) ConnectWithICal(ctx context.Context, icalURL string) (Moodle, int, error) {
-	c, err := ical.NewClient(strings.TrimSpace(icalURL), s.http)
+	icalURL = strings.TrimSpace(icalURL)
+	c, err := ical.NewClient(icalURL, s.http)
 	if err != nil {
 		return Moodle{}, 0, err
 	}
-	return s.save(ctx, Moodle{Method: MethodICal, BaseURL: c.BaseURL(), ICalURL: strings.TrimSpace(icalURL)})
+	userID := userIDOf(icalURL)
+	if userID == 0 {
+		return Moodle{}, 0, ErrMissingUserID
+	}
+	if err := s.checkOwner(ctx, c.BaseURL(), userID); err != nil {
+		return Moodle{}, 0, err
+	}
+	return s.save(ctx, Moodle{Method: MethodICal, BaseURL: c.BaseURL(), ICalURL: icalURL, UserID: userID})
+}
+
+// owner é o dono salvo ou, sem ele, o da PRAZO_ICAL_URL configurada no
+// servidor. ok=false quando o servidor ainda não tem dono.
+func (s *Service) owner(ctx context.Context) (Owner, bool, error) {
+	if s.kv != nil {
+		b, err := s.kv.Get(ctx, store.KeyOwner)
+		switch {
+		case err == nil:
+			var o Owner
+			return o, true, json.Unmarshal(b, &o)
+		case !errors.Is(err, store.ErrNotFound):
+			return Owner{}, false, err
+		}
+	}
+	if id := userIDOf(s.envICal); id != 0 {
+		return Owner{Host: hostOf(s.envICal), UserID: id}, true, nil
+	}
+	return Owner{}, false, nil
+}
+
+func (s *Service) checkOwner(ctx context.Context, base string, userID int64) error {
+	o, ok, err := s.owner(ctx)
+	if err != nil || !ok {
+		return err
+	}
+	if !strings.EqualFold(o.Host, hostOf(base)) || o.UserID != userID {
+		return ErrNotOwner
+	}
+	return nil
+}
+
+func userIDOf(raw string) int64 {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return 0
+	}
+	id, _ := strconv.ParseInt(u.Query().Get("userid"), 10, 64)
+	return id
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Host)
 }
 
 func (s *Service) Disconnect(ctx context.Context) error {
@@ -140,6 +198,13 @@ func (s *Service) save(ctx context.Context, m Moodle) (Moodle, int, error) {
 	}
 	if err := s.kv.Put(ctx, store.KeyMoodle, b); err != nil {
 		return Moodle{}, 0, err
+	}
+	// O primeiro a entrar vira dono; depois disso, só a mesma conta entra.
+	if _, ok, err := s.owner(ctx); err == nil && !ok && m.UserID != 0 {
+		ob, _ := json.Marshal(Owner{Host: hostOf(m.BaseURL), UserID: m.UserID})
+		if err := s.kv.Put(ctx, store.KeyOwner, ob); err != nil {
+			return Moodle{}, 0, err
+		}
 	}
 	return m, len(feed.Events), nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/api"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
+	"github.com/GabrielLima2803/prazo-sync/internal/session"
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
@@ -37,6 +38,7 @@ func runServe(ctx context.Context, a *app, args []string) error {
 	deps := api.Deps{
 		Runner:       runner,
 		Accounts:     accounts,
+		Sessions:     session.New(kv),
 		Prefs:        prefs.NewStore(kv),
 		Token:        a.cfg.Server.APIToken,
 		CalendarName: a.cfg.Google.CalendarName,

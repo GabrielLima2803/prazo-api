@@ -60,6 +60,12 @@ Há testes para cada um desses caminhos (`logging_test.go` e `client_test.go`).
 
 ## API do app
 
+- Sessões do app: token aleatório de 52 caracteres entregue só no login;
+  no disco fica apenas o SHA-256 (`app_sessions.enc`, cifrado). Máximo de 10
+  aparelhos; sair revoga a sessão do aparelho.
+- Login restrito ao dono do servidor (conta do Moodle) e limitado a 10
+  tentativas por minuto; o próprio Moodle bloqueia senhas erradas em série.
+
 - Toda rota fora `/healthz` exige o token Bearer; sem ele, 401 sem detalhes.
 - Por padrão escuta só em `127.0.0.1`. Para o celular, `0.0.0.0:8080` na
   rede local: o tráfego é HTTP puro, então qualquer um na mesma rede Wi-Fi

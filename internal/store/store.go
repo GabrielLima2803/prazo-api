@@ -22,4 +22,6 @@ const (
 	KeyGoogleCalendar = "google_calendar_id"
 	KeyPreferences    = "preferences"
 	KeyMoodle         = "moodle_account"
+	KeySessions       = "app_sessions"
+	KeyOwner          = "owner"
 )

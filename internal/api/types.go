@@ -10,12 +10,14 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
+	"github.com/GabrielLima2803/prazo-sync/internal/session"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
 type Deps struct {
 	Runner       *sync.Runner
 	Accounts     *account.Service
+	Sessions     *session.Service
 	Prefs        *prefs.Store
 	Token        string
 	CalendarName string
@@ -137,6 +139,11 @@ type moodleLogin struct {
 	BaseURL  string `json:"baseUrl"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+type loginResponse struct {
+	Token  string       `json:"token"`
+	Moodle MoodleStatus `json:"moodle"`
 }
 
 type moodleICal struct {

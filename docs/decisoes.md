@@ -197,3 +197,17 @@ Formato curto: contexto → decisão → consequência.
 - **Consequência:** funciona no Expo Go e, de quebra, o app passa a alcançar o
   servidor fora de casa por HTTPS. `prazo auth` (credencial de computador)
   continua valendo para uso só no terminal.
+
+## D19. O login do Moodle é o login do app
+
+- **Contexto:** pedir endereço do servidor e token da API na primeira tela é
+  coisa de desenvolvedor, não de aluno.
+- **Decisão:** o app já vem com o endereço do servidor
+  (`EXPO_PUBLIC_PRAZO_SERVER`, padrão o endereço do Tailscale) e a primeira
+  tela é "Entrar com o Moodle". O servidor confere a conta no Moodle e emite
+  uma sessão. Como o servidor ainda é de uma pessoa só, ele tem um **dono**
+  (`account.Owner`): a conta da `PRAZO_ICAL_URL` ou a primeira que entrar.
+  Logo depois do login vem o passo "Conectar Google Agenda", com "Agora não".
+- **Consequência:** a mesma tela serve para quando o servidor virar
+  multiusuário (Fase 7): a regra do dono vira "cada conta tem o próprio
+  espaço".

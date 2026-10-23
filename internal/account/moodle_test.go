@@ -164,3 +164,36 @@ func TestEnvFallback(t *testing.T) {
 		t.Fatalf("sem nada: %v", err)
 	}
 }
+
+func TestOwnerIsEnforced(t *testing.T) {
+	ctx := context.Background()
+	srv := fakeMoodle(t, true)
+	kv := memKV{}
+
+	// Sem dono: o primeiro login vira dono.
+	if _, _, err := newService(srv, kv, "").ConnectWithLogin(ctx, srv.URL, "aluno", password); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := kv[store.KeyOwner]; !ok {
+		t.Fatal("o primeiro login deveria definir o dono")
+	}
+
+	// Outra conta (userid diferente na URL do iCal) é recusada.
+	other := srv.URL + "/calendar/export_execute.php?userid=7&authtoken=" + exportToken
+	if _, _, err := newService(srv, kv, "").ConnectWithICal(ctx, other); !errors.Is(err, ErrNotOwner) {
+		t.Fatalf("outra conta: %v", err)
+	}
+	noUser := srv.URL + "/calendar/export_execute.php?authtoken=" + exportToken
+	if _, _, err := newService(srv, kv, "").ConnectWithICal(ctx, noUser); !errors.Is(err, ErrMissingUserID) {
+		t.Fatalf("sem userid: %v", err)
+	}
+}
+
+func TestOwnerFromEnv(t *testing.T) {
+	srv := fakeMoodle(t, true)
+	env := srv.URL + "/calendar/export_execute.php?userid=99&authtoken=x"
+	// O login devolve userid 42, mas o servidor é do 99 (PRAZO_ICAL_URL).
+	if _, _, err := newService(srv, memKV{}, env).ConnectWithLogin(context.Background(), srv.URL, "aluno", password); !errors.Is(err, ErrNotOwner) {
+		t.Fatalf("err = %v", err)
+	}
+}

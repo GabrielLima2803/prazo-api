@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	gosync "sync"
 	"time"
 )
 
@@ -14,6 +15,7 @@ const maxBody = 64 << 10
 
 type server struct {
 	Deps
+	logins *limiter
 }
 
 // New devolve o handler com todas as rotas. /healthz é público; o resto
@@ -25,7 +27,7 @@ func New(d Deps) http.Handler {
 	if d.SyncTimeout <= 0 {
 		d.SyncTimeout = 3 * time.Minute
 	}
-	s := &server{d}
+	s := &server{Deps: d, logins: newLimiter(10, time.Minute)}
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/status", s.status)
@@ -39,6 +41,7 @@ func New(d Deps) http.Handler {
 	api.HandleFunc("POST /api/v1/moodle/login", s.moodleLogin)
 	api.HandleFunc("POST /api/v1/moodle/ical", s.moodleICal)
 	api.HandleFunc("DELETE /api/v1/moodle", s.deleteMoodle)
+	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	api.HandleFunc("POST /api/v1/google/auth", s.googleAuth)
 	api.HandleFunc("DELETE /api/v1/google", s.deleteGoogle)
 
@@ -47,21 +50,53 @@ func New(d Deps) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 	mux.Handle("/api/", s.authenticate(api))
+	// Login do app: públicos, com limite de tentativas. Só o dono do
+	// servidor (account.Owner) consegue entrar.
+	mux.HandleFunc("POST /auth/login", s.login)
+	mux.HandleFunc("POST /auth/ical", s.loginICal)
 	// Público: quem chega aqui é o navegador vindo do Google; o state prova
 	// que a autorização começou pelo app autenticado.
 	mux.HandleFunc("GET /oauth/google/callback", s.googleCallback)
 	return s.logRequests(cors(mux))
 }
 
+// authenticate aceita a sessão do app ou o PRAZO_API_TOKEN (terminal e
+// administração).
 func (s *server) authenticate(next http.Handler) http.Handler {
-	want := []byte("Bearer " + s.Token)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
-			writeError(w, http.StatusUnauthorized, errors.New("token inválido"))
+		token, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		admin := bearer && s.Token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.Token)) == 1
+		if !admin && (!bearer || s.Sessions == nil || !s.Sessions.Valid(r.Context(), token)) {
+			writeCodedError(w, http.StatusUnauthorized, "unauthorized", errors.New("sessão expirada; entre de novo"))
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// limiter é uma janela fixa global: suficiente para um servidor de uma
+// pessoa, e o próprio Moodle bloqueia contas após várias senhas erradas.
+type limiter struct {
+	mu     gosync.Mutex
+	max    int
+	window time.Duration
+	start  time.Time
+	count  int
+}
+
+func newLimiter(max int, window time.Duration) *limiter {
+	return &limiter{max: max, window: window}
+}
+
+func (l *limiter) allow() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	if now.Sub(l.start) > l.window {
+		l.start, l.count = now, 0
+	}
+	l.count++
+	return l.count <= l.max
 }
 
 // cors libera o app rodando no navegador (Expo web) em desenvolvimento. A

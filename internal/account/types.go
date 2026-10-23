@@ -31,6 +31,13 @@ type Moodle struct {
 	ConnectedAt time.Time `json:"connectedAt"`
 }
 
+// Owner é a conta do Moodle dona do servidor. Enquanto o Prazo for de um
+// usuário só, apenas ela consegue entrar pelo app.
+type Owner struct {
+	Host   string `json:"host"`
+	UserID int64  `json:"userId"`
+}
+
 type Service struct {
 	kv      store.KV // nil: só a variável de ambiente
 	http    *httpx.Client

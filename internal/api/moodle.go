@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
@@ -70,6 +71,10 @@ func (s *server) connected(w http.ResponseWriter, m account.Moodle, events int, 
 
 func connectError(err error) (int, string) {
 	switch {
+	case errors.Is(err, account.ErrNotOwner):
+		return http.StatusForbidden, "not_owner"
+	case errors.Is(err, account.ErrMissingUserID):
+		return http.StatusUnprocessableEntity, "invalid_url"
 	case errors.Is(err, webservice.ErrInvalidLogin):
 		return http.StatusUnprocessableEntity, "invalid_login"
 	case errors.Is(err, webservice.ErrServiceUnavailable):
@@ -93,4 +98,66 @@ func toMoodleStatus(m account.Moodle, events int) MoodleStatus {
 		st.ConnectedAt = &at
 	}
 	return st
+}
+
+func (s *server) login(w http.ResponseWriter, r *http.Request) {
+	if !s.logins.allow() {
+		writeCodedError(w, http.StatusTooManyRequests, "too_many_attempts", errors.New("muitas tentativas; espere um minuto"))
+		return
+	}
+	var req moodleLogin
+	if !decode(w, r, &req) {
+		return
+	}
+	m, events, err := s.Accounts.ConnectWithLogin(r.Context(), req.BaseURL, req.Username, req.Password)
+	s.loggedIn(w, r, m, events, err)
+}
+
+func (s *server) loginICal(w http.ResponseWriter, r *http.Request) {
+	if !s.logins.allow() {
+		writeCodedError(w, http.StatusTooManyRequests, "too_many_attempts", errors.New("muitas tentativas; espere um minuto"))
+		return
+	}
+	var req moodleICal
+	if !decode(w, r, &req) {
+		return
+	}
+	m, events, err := s.Accounts.ConnectWithICal(r.Context(), req.ICalURL)
+	s.loggedIn(w, r, m, events, err)
+}
+
+// loggedIn emite a sessão do app depois que a conta do Moodle foi conferida
+// e salva, e já dispara a primeira sincronização.
+func (s *server) loggedIn(w http.ResponseWriter, r *http.Request, m account.Moodle, events int, err error) {
+	if err != nil {
+		status, code := connectError(err)
+		if code == "not_owner" {
+			s.Log.Warn("login recusado: outra conta do Moodle")
+		}
+		writeCodedError(w, status, code, err)
+		return
+	}
+	token, err := s.Sessions.Issue(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.Runner.Invalidate()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), s.SyncTimeout)
+		defer cancel()
+		s.Runner.RunNow(ctx)
+	}()
+	writeJSON(w, http.StatusOK, loginResponse{Token: token, Moodle: toMoodleStatus(m, events)})
+}
+
+func (s *server) logout(w http.ResponseWriter, r *http.Request) {
+	token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if s.Sessions != nil {
+		if err := s.Sessions.Revoke(r.Context(), token); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

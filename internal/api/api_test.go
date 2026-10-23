@@ -18,6 +18,7 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
+	"github.com/GabrielLima2803/prazo-sync/internal/session"
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
@@ -270,4 +271,69 @@ func TestGoogleAppAuthUnavailable(t *testing.T) {
 	if code := call(t, srv, http.MethodPost, "/api/v1/google/auth", `{}`, &e); code != http.StatusNotImplemented || e.Code != "google_app_auth_unavailable" {
 		t.Fatalf("sem configuração: %d %+v", code, e)
 	}
+}
+
+func TestLoginIssuesSession(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	kv := memKV{}
+	moodle := fakeMoodleTLS(t)
+	h := httpx.New(httpx.Options{Transport: moodle.Client().Transport})
+	accounts := account.NewService(kv, h, log, "")
+	sessions := session.New(kv)
+	runner := sync.NewRunner(sync.NewService(accounts.Source(), domain.NormalizeOptions{}), func(context.Context) (sync.Target, error) {
+		return sync.Target{}, errors.New("sem destino no teste")
+	}, log)
+	srv := httptest.NewServer(New(Deps{Runner: runner, Accounts: accounts, Sessions: sessions, Prefs: prefs.NewStore(kv), Token: token, Log: log,
+		GoogleReady: func(context.Context) bool { return false }}))
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/auth/login", "application/json",
+		strings.NewReader(`{"baseUrl":"`+moodle.URL+`","username":"aluno","password":"certa"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lr loginResponse
+	json.NewDecoder(resp.Body).Decode(&lr)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || lr.Token == "" || !lr.Moodle.Connected {
+		t.Fatalf("login: %d %+v", resp.StatusCode, lr)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/moodle", nil)
+	req.Header.Set("Authorization", "Bearer "+lr.Token)
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("sessão não aceita: %d", resp.StatusCode)
+	}
+
+	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+lr.Token)
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if sessions.Valid(context.Background(), lr.Token) {
+		t.Fatal("logout não revogou a sessão")
+	}
+}
+
+// fakeMoodleTLS é o mínimo para o login: token.php, site info, token de
+// exportação e um calendário com um evento.
+func fakeMoodleTLS(t *testing.T) *httptest.Server {
+	t.Helper()
+	const ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:1@moodle\r\nSUMMARY:Lista 1 é devido\r\nDTSTART:20261030T025900Z\r\nDTEND:20261030T025900Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		switch {
+		case r.URL.Path == "/login/token.php":
+			io.WriteString(w, `{"token":"ws"}`)
+		case r.Form.Get("wsfunction") == "core_webservice_get_site_info":
+			io.WriteString(w, `{"sitename":"M","fullname":"Aluno","userid":42,"functions":[{"name":"core_calendar_get_calendar_export_token"}]}`)
+		case r.Form.Get("wsfunction") == "core_calendar_get_calendar_export_token":
+			io.WriteString(w, `{"token":"exp"}`)
+		case r.URL.Path == "/calendar/export_execute.php":
+			io.WriteString(w, ics)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }

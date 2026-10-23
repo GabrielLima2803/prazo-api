@@ -1,7 +1,20 @@
 # API do app (`prazo serve`)
 
 JSON sobre HTTP, consumida pelo [prazo-app](https://github.com/GabrielLima2803/prazo-app).
-Todas as rotas em `/api/v1` exigem `Authorization: Bearer <PRAZO_API_TOKEN>`.
+
+## Autenticação
+
+O app entra com o Moodle: `POST /auth/login` (`{baseUrl, username, password}`)
+ou `POST /auth/ical` (`{icalUrl}`) devolvem `{token, moodle}`. O token é uma
+sessão do app (até 10 aparelhos; só o hash SHA-256 fica no disco) e vai em
+`Authorization: Bearer <token>` nas rotas de `/api/v1`. `POST
+/api/v1/auth/logout` encerra a sessão do aparelho.
+
+- Só o **dono** entra: a conta do Moodle da `PRAZO_ICAL_URL` (pelo `userid`)
+  ou, sem ela, a primeira que entrar. Outra conta recebe 403 `not_owner`.
+- As rotas de login aceitam 10 tentativas por minuto (429 `too_many_attempts`).
+- O `PRAZO_API_TOKEN` continua valendo em `/api/v1`, para o terminal e
+  administração.
 
 ```sh
 set -a; . ./.env; set +a
