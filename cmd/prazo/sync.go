@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
@@ -31,21 +30,13 @@ func runSync(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	sink, err := a.googleSink(ctx, kv)
+	t, err := a.target(kv)(ctx)
 	if err != nil {
 		return err
 	}
 
 	start := time.Now()
-	r, err := svc.Sync(ctx, sync.Target{
-		Sink:  sink,
-		State: kv,
-		Calendar: calendar.Spec{
-			Summary:     a.cfg.Google.CalendarName,
-			Description: "Prazos do Moodle, mantidos automaticamente pelo Prazo. Alterações manuais podem ser sobrescritas.",
-			TimeZone:    a.cfg.Location.String(),
-		},
-	})
+	r, err := svc.Sync(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -54,7 +45,7 @@ func runSync(ctx context.Context, a *app, args []string) error {
 	}
 	a.log.Info("sync concluído",
 		"buscados", r.Plan.Fetched, "prazos", len(r.Plan.Deadlines),
-		"criados", r.Created, "atualizados", r.Updated, "falhas", r.Failed,
+		"criados", r.Created, "atualizados", r.Updated, "ocultos", r.Hidden, "falhas", r.Failed,
 		"duracao", time.Since(start).Round(time.Millisecond))
 	fmt.Fprintf(a.stdout, "%d prazo(s) na agenda %q: %d criado(s), %d atualizado(s), %d falha(s).\n",
 		len(r.Plan.Deadlines), a.cfg.Google.CalendarName, r.Created, r.Updated, r.Failed)

@@ -46,8 +46,8 @@ func runAuth(ctx context.Context, a *app, args []string) error {
 }
 
 func runKeygen(_ context.Context, a *app, args []string) error {
-	fs := newFlagSet("keygen", "Gera uma PRAZO_MASTER_KEY nova (32 bytes em base64).\n"+
-		"Trocar a chave invalida os segredos já guardados: será preciso rodar \"prazo auth\" de novo.")
+	fs := newFlagSet("keygen", "Gera 32 bytes aleatórios em base64, para PRAZO_MASTER_KEY ou PRAZO_API_TOKEN.\n"+
+		"Trocar a PRAZO_MASTER_KEY invalida os segredos já guardados: será preciso rodar \"prazo auth\" de novo.")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

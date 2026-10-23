@@ -8,9 +8,12 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
 	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
+	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/store/filekv"
+	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
 var (
@@ -38,6 +41,31 @@ func (a *app) oauthConfig() (*oauth2.Config, error) {
 		return nil, errNoCredentials
 	}
 	return google.LoadConfig(a.cfg.Google.CredentialsFile)
+}
+
+// target monta o destino a cada execução: lê o token e as preferências na
+// hora, para que "prazo auth" e mudanças no app valham sem reiniciar.
+func (a *app) target(kv *filekv.Store) sync.TargetFunc {
+	ps := prefs.NewStore(kv)
+	return func(ctx context.Context) (sync.Target, error) {
+		sink, err := a.googleSink(ctx, kv)
+		if err != nil {
+			return sync.Target{}, err
+		}
+		p, err := ps.Load(ctx)
+		if err != nil {
+			return sync.Target{}, err
+		}
+		return sync.Target{Sink: sink, State: kv, Calendar: a.calendarSpec(), Prefs: p}, nil
+	}
+}
+
+func (a *app) calendarSpec() calendar.Spec {
+	return calendar.Spec{
+		Summary:     a.cfg.Google.CalendarName,
+		Description: "Prazos do Moodle, mantidos automaticamente pelo Prazo. Alterações manuais podem ser sobrescritas.",
+		TimeZone:    a.cfg.Location.String(),
+	}
 }
 
 func (a *app) googleSink(ctx context.Context, kv *filekv.Store) (*google.Sink, error) {

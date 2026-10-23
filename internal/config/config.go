@@ -23,12 +23,16 @@ const (
 	DefaultTimezone     = "America/Sao_Paulo"
 	DefaultCalendarName = "Prazo — UDESC"
 	DefaultDataDir      = "data"
+	DefaultHTTPAddr     = "127.0.0.1:8080"
+	DefaultSyncInterval = 30 * time.Minute
+	MinAPITokenLen      = 32
 )
 
 type Config struct {
 	Moodle    Moodle
 	Google    Google
 	Storage   Storage
+	Server    Server
 	Log       Log
 	Normalize domain.NormalizeOptions
 	Location  *time.Location // fuso de exibição e dos eventos na agenda
@@ -48,6 +52,12 @@ type Moodle struct {
 	BaseURL string
 	ICalURL string // segredo: contém o authtoken
 	Token   string // segredo
+}
+
+type Server struct {
+	Addr         string
+	APIToken     string // segredo; exigido pelo "prazo serve"
+	SyncInterval time.Duration
 }
 
 type Log struct {
@@ -70,7 +80,18 @@ func load(getenv func(string) string) (Config, error) {
 			CalendarName:    e.str("PRAZO_CALENDAR_NAME", DefaultCalendarName),
 		},
 		Storage: Storage{DataDir: e.str("PRAZO_DATA_DIR", DefaultDataDir)},
-		Log:     Log{Format: e.oneOf("PRAZO_LOG_FORMAT", "text", "text", "json")},
+		Server: Server{
+			Addr:         e.str("PRAZO_HTTP_ADDR", DefaultHTTPAddr),
+			APIToken:     e.str("PRAZO_API_TOKEN", ""),
+			SyncInterval: e.duration("PRAZO_SYNC_INTERVAL", DefaultSyncInterval),
+		},
+		Log: Log{Format: e.oneOf("PRAZO_LOG_FORMAT", "text", "text", "json")},
+	}
+	if t := cfg.Server.APIToken; t != "" && len(t) < MinAPITokenLen {
+		e.fail("PRAZO_API_TOKEN", fmt.Errorf("use pelo menos %d caracteres (gere com \"prazo keygen\")", MinAPITokenLen))
+	}
+	if cfg.Server.SyncInterval < time.Minute {
+		e.fail("PRAZO_SYNC_INTERVAL", errors.New("o mínimo é 1m, para não sobrecarregar o Moodle"))
 	}
 	if raw := e.str("PRAZO_MASTER_KEY", ""); raw != "" {
 		key, err := crypto.ParseKey(raw)
@@ -189,6 +210,19 @@ func (e *env) typeSet(key string) collections.Set[domain.DeadlineType] {
 		s.Add(t)
 	}
 	return s
+}
+
+func (e *env) duration(key string, def time.Duration) time.Duration {
+	v := e.str(key, "")
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		e.fail(key, fmt.Errorf("use o formato 30m, 1h: %w", err))
+		return def
+	}
+	return d
 }
 
 // date lê AAAA-MM-DD como meia-noite no fuso loc.

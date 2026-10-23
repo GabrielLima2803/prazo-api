@@ -33,9 +33,10 @@ type command struct {
 
 var commands = []command{
 	{"doctor", "diagnostica a exportação iCal e os web services do Moodle", runDoctor},
-	{"keygen", "gera uma PRAZO_MASTER_KEY", runKeygen},
+	{"keygen", "gera uma chave aleatória (PRAZO_MASTER_KEY, PRAZO_API_TOKEN)", runKeygen},
 	{"auth", "autoriza o acesso ao Google Agenda", runAuth},
 	{"sync", "sincroniza os prazos com o Google Agenda (--dry-run só mostra)", runSync},
+	{"serve", "API do app e sincronização periódica", runServe},
 }
 
 func main() {
