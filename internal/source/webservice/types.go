@@ -82,6 +82,7 @@ type SiteFunction struct {
 
 type SiteInfo struct {
 	SiteName  string         `json:"sitename"`
+	FullName  string         `json:"fullname"`
 	UserID    int64          `json:"userid"`
 	Release   string         `json:"release"`
 	Version   string         `json:"version"`

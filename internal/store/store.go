@@ -13,10 +13,13 @@ var ErrNotFound = errors.New("chave não encontrada")
 type KV interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Put(ctx context.Context, key string, value []byte) error
+	// Delete não falha se a chave não existir.
+	Delete(ctx context.Context, key string) error
 }
 
 const (
 	KeyGoogleToken    = "google_token"
 	KeyGoogleCalendar = "google_calendar_id"
 	KeyPreferences    = "preferences"
+	KeyMoodle         = "moodle_account"
 )

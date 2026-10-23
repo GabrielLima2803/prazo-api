@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
+	"github.com/GabrielLima2803/prazo-sync/internal/account"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
@@ -18,10 +18,7 @@ func runSync(ctx context.Context, a *app, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	svc, err := a.syncService()
-	if err != nil {
-		return err
-	}
+	svc := a.syncService(a.accounts())
 	if *dryRun {
 		return dryRunSync(ctx, a, svc, *days, *links)
 	}
@@ -52,15 +49,18 @@ func runSync(ctx context.Context, a *app, args []string) error {
 	return nil
 }
 
-func (a *app) syncService() (*sync.Service, error) {
-	if a.cfg.Moodle.ICalURL == "" {
-		return nil, errors.New("defina PRAZO_ICAL_URL (veja docs/desenvolvimento.md)")
+// accounts usa a conta do Moodle conectada pelo app (cifrada no
+// PRAZO_DATA_DIR) e cai para PRAZO_ICAL_URL quando não há nenhuma.
+func (a *app) accounts() *account.Service {
+	var kv store.KV
+	if s, err := a.secrets(); err == nil {
+		kv = s
 	}
-	client, err := ical.NewClient(a.cfg.Moodle.ICalURL, a.http)
-	if err != nil {
-		return nil, err
-	}
-	return sync.NewService(ical.NewSource(client, a.log), a.cfg.Normalize), nil
+	return account.NewService(kv, a.http, a.log, a.cfg.Moodle.ICalURL)
+}
+
+func (a *app) syncService(acc *account.Service) *sync.Service {
+	return sync.NewService(acc.Source(), a.cfg.Normalize)
 }
 
 func dryRunSync(ctx context.Context, a *app, svc *sync.Service, days int, links bool) error {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/api"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
@@ -26,19 +27,16 @@ func runServe(ctx context.Context, a *app, args []string) error {
 	if a.cfg.Server.APIToken == "" {
 		return errNoAPIToken
 	}
-	svc, err := a.syncService()
-	if err != nil {
-		return err
-	}
 	kv, err := a.secrets()
 	if err != nil {
 		return err
 	}
-
-	runner := sync.NewRunner(svc, a.target(kv), a.log)
+	accounts := account.NewService(kv, a.http, a.log, a.cfg.Moodle.ICalURL)
+	runner := sync.NewRunner(a.syncService(accounts), a.target(kv), a.log)
 	srv := &http.Server{
 		Handler: api.New(api.Deps{
 			Runner:       runner,
+			Accounts:     accounts,
 			Prefs:        prefs.NewStore(kv),
 			Token:        a.cfg.Server.APIToken,
 			CalendarName: a.cfg.Google.CalendarName,

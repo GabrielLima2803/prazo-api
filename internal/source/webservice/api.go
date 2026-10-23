@@ -33,3 +33,18 @@ func (c *Client) PendingEvents(ctx context.Context, token string, from time.Time
 	err := c.Call(ctx, token, "core_calendar_get_action_events_by_timesort", args, &resp)
 	return resp.Events, err
 }
+
+// CalendarExportToken devolve o authtoken da exportação iCal do usuário, o
+// mesmo que o Moodle põe na URL de "Exportar calendário".
+func (c *Client) CalendarExportToken(ctx context.Context, token string) (string, error) {
+	var resp struct {
+		Token string `json:"token"`
+	}
+	if err := c.Call(ctx, token, "core_calendar_get_calendar_export_token", nil, &resp); err != nil {
+		return "", err
+	}
+	if resp.Token == "" {
+		return "", ErrUnexpectedResponse
+	}
+	return resp.Token, nil
+}

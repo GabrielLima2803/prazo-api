@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -34,6 +35,10 @@ func New(d Deps) http.Handler {
 	api.HandleFunc("GET /api/v1/preferences", s.getPreferences)
 	api.HandleFunc("PUT /api/v1/preferences", s.putPreferences)
 	api.HandleFunc("POST /api/v1/sync", s.sync)
+	api.HandleFunc("GET /api/v1/moodle", s.getMoodle)
+	api.HandleFunc("POST /api/v1/moodle/login", s.moodleLogin)
+	api.HandleFunc("POST /api/v1/moodle/ical", s.moodleICal)
+	api.HandleFunc("DELETE /api/v1/moodle", s.deleteMoodle)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -101,4 +106,18 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 func writeError(w http.ResponseWriter, code int, err error) {
 	writeJSON(w, code, errorBody{Error: err.Error()})
+}
+
+func writeCodedError(w http.ResponseWriter, status int, code string, err error) {
+	writeJSON(w, status, errorBody{Error: err.Error(), Code: code})
+}
+
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("JSON inválido: %w", err))
+		return false
+	}
+	return true
 }

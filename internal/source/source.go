@@ -15,3 +15,15 @@ import (
 type Source interface {
 	Fetch(ctx context.Context) ([]domain.Deadline, error)
 }
+
+// Func adia a escolha da fonte para cada Fetch. Permite trocar a conta do
+// Moodle pelo app sem reiniciar o servidor.
+type Func func(ctx context.Context) (Source, error)
+
+func (f Func) Fetch(ctx context.Context) ([]domain.Deadline, error) {
+	s, err := f(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.Fetch(ctx)
+}

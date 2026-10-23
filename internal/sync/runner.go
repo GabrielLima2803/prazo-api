@@ -76,6 +76,14 @@ func (r *Runner) RunNow(ctx context.Context) (Run, error) {
 	return run, err
 }
 
+// Invalidate descarta o plano em cache, por exemplo depois de trocar a conta
+// do Moodle.
+func (r *Runner) Invalidate() {
+	r.mu.Lock()
+	r.plan = nil
+	r.mu.Unlock()
+}
+
 func (r *Runner) Last() (Run, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

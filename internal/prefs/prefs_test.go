@@ -22,6 +22,8 @@ func (m memKV) Get(_ context.Context, k string) ([]byte, error) {
 
 func (m memKV) Put(_ context.Context, k string, v []byte) error { m[k] = v; return nil }
 
+func (m memKV) Delete(_ context.Context, k string) error { delete(m, k); return nil }
+
 func TestSaveLoadNormalizes(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(memKV{})

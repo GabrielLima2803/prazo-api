@@ -73,6 +73,17 @@ func (s *Store) Put(_ context.Context, key string, value []byte) error {
 	return os.Rename(tmp.Name(), path)
 }
 
+func (s *Store) Delete(_ context.Context, key string) error {
+	path, err := s.path(key)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 func (s *Store) path(key string) (string, error) {
 	if !validKey.MatchString(key) {
 		return "", fmt.Errorf("chave inválida %q", key)

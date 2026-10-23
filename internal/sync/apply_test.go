@@ -25,6 +25,8 @@ func (m memKV) Get(_ context.Context, k string) ([]byte, error) {
 
 func (m memKV) Put(_ context.Context, k string, v []byte) error { m[k] = v; return nil }
 
+func (m memKV) Delete(_ context.Context, k string) error { delete(m, k); return nil }
+
 func target(sink calendar.Sink, kv memKV) Target {
 	return Target{Sink: sink, State: kv, Calendar: calendar.Spec{Summary: "Prazo — UDESC", TimeZone: "America/Sao_Paulo"}}
 }

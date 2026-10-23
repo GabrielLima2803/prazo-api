@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
@@ -66,10 +66,20 @@ func (s *server) load(ctx context.Context, refresh bool) (view, error) {
 	return view{plan: plan, prefs: p, style: p.Style()}, nil
 }
 
+// planError diferencia "Moodle não conectado" (o app mostra a tela de
+// conexão) de uma falha ao ler o Moodle.
+func planError(w http.ResponseWriter, err error) {
+	if errors.Is(err, account.ErrNotConnected) {
+		writeCodedError(w, http.StatusConflict, "moodle_not_connected", err)
+		return
+	}
+	writeError(w, http.StatusBadGateway, fmt.Errorf("não foi possível ler o Moodle: %w", err))
+}
+
 func (s *server) deadlines(w http.ResponseWriter, r *http.Request) {
 	v, err := s.load(r.Context(), r.URL.Query().Get("refresh") == "1")
 	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Errorf("não foi possível ler o Moodle: %w", err))
+		planError(w, err)
 		return
 	}
 	out := DeadlineList{Deadlines: make([]Deadline, 0, len(v.plan.Deadlines)), FetchedAt: v.plan.At}
@@ -82,7 +92,7 @@ func (s *server) deadlines(w http.ResponseWriter, r *http.Request) {
 func (s *server) courses(w http.ResponseWriter, r *http.Request) {
 	v, err := s.load(r.Context(), false)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Errorf("não foi possível ler o Moodle: %w", err))
+		planError(w, err)
 		return
 	}
 	byCode := map[string]*Course{}
@@ -125,10 +135,7 @@ func (s *server) getPreferences(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) putPreferences(w http.ResponseWriter, r *http.Request) {
 	var p prefs.Preferences
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&p); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("JSON inválido: %w", err))
+	if !decode(w, r, &p) {
 		return
 	}
 	saved, err := s.Prefs.Save(r.Context(), p)

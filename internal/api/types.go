@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
@@ -14,6 +15,7 @@ import (
 
 type Deps struct {
 	Runner       *sync.Runner
+	Accounts     *account.Service
 	Prefs        *prefs.Store
 	Token        string
 	CalendarName string
@@ -101,6 +103,29 @@ type Type struct {
 	DefaultReminders []int               `json:"defaultReminders"`
 }
 
+type MoodleStatus struct {
+	Connected   bool           `json:"connected"`
+	Method      account.Method `json:"method,omitempty"`
+	BaseURL     string         `json:"baseUrl,omitempty"`
+	FullName    string         `json:"fullName,omitempty"`
+	SiteName    string         `json:"siteName,omitempty"`
+	ConnectedAt *time.Time     `json:"connectedAt,omitempty"`
+	Events      int            `json:"events,omitempty"` // só na resposta de conexão
+}
+
+type moodleLogin struct {
+	BaseURL  string `json:"baseUrl"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type moodleICal struct {
+	ICalURL string `json:"icalUrl"`
+}
+
+// errorBody leva um código estável para o app decidir o que mostrar, além
+// da mensagem em português.
 type errorBody struct {
 	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
 }

@@ -168,3 +168,19 @@ Formato curto: contexto → decisão → consequência.
   (`internal/api/types.go` e `src/api/types.ts`); um bug real de contrato
   (`null` em vez de `[]` nas preferências) foi pego no teste ponta a ponta e
   virou teste no Go.
+
+## D17. Conectar o Moodle pelo app, sem guardar a senha
+
+- **Contexto:** pedir para o aluno achar e copiar a URL do iCal é a parte mais
+  difícil da configuração.
+- **Decisão:** o app manda usuário e senha uma vez; o servidor faz login no
+  serviço do app mobile (`/login/token.php`), chama
+  `core_calendar_get_calendar_export_token` (liberada no serviço oficial do
+  app no Moodle 4.5) e monta a mesma URL de "Exportar calendário". Só salva
+  depois de baixar o calendário com sucesso. A senha não é logada nem
+  guardada; a conta (URL e token) fica cifrada em `moodle_account.enc`.
+  Contas só com SSO colam a URL. `PRAZO_ICAL_URL` vira fallback.
+- **Consequência:** a fonte de prazos é resolvida a cada busca
+  (`source.Func`), então trocar de conta no app vale na hora. A senha passa
+  pela rede local em HTTP até o servidor, mais um motivo para HTTPS antes de
+  usar fora de casa.

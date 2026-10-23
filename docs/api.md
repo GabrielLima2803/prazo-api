@@ -23,6 +23,15 @@ prazos e avisa que falta o `prazo auth`.
 | `GET /api/v1/preferences` | preferências atuais (coleções vazias, nunca `null`) |
 | `PUT /api/v1/preferences` | substitui as preferências; 422 se inválidas, 400 para JSON desconhecido |
 | `POST /api/v1/sync` | sincroniza agora e devolve o resultado; 409 se já houver uma em andamento |
+| `GET /api/v1/moodle` | conta conectada (nome, site, método); nunca devolve a URL do iCal nem o token |
+| `POST /api/v1/moodle/login` | `{baseUrl, username, password}` → token de web service → authtoken da exportação → URL do iCal; testa o calendário antes de salvar |
+| `POST /api/v1/moodle/ical` | `{icalUrl}` para contas só com SSO; testa antes de salvar |
+| `DELETE /api/v1/moodle` | esquece a conta (volta a `PRAZO_ICAL_URL`, se houver) |
+
+Erros trazem um `code` estável além da mensagem: `moodle_not_connected` (409 em
+`/deadlines` e `/courses`), `invalid_login`, `export_unavailable`,
+`service_unavailable`, `invalid_url`, `not_icalendar`, `empty_feed`,
+`moodle_unreachable`.
 
 ## Preferências
 

@@ -11,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/calendartest"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
@@ -33,6 +35,8 @@ func (m memKV) Get(_ context.Context, k string) ([]byte, error) {
 }
 
 func (m memKV) Put(_ context.Context, k string, v []byte) error { m[k] = v; return nil }
+
+func (m memKV) Delete(_ context.Context, k string) error { delete(m, k); return nil }
 
 type fakeSource []domain.Deadline
 
@@ -57,6 +61,7 @@ func newServer(t *testing.T) *httptest.Server {
 	}, log)
 	srv := httptest.NewServer(New(Deps{
 		Runner: runner, Prefs: ps, Token: token, CalendarName: "Prazo — UDESC",
+		Accounts:    account.NewService(kv, httpx.New(httpx.Options{}), log, ""),
 		GoogleReady: func(context.Context) bool { return true }, Log: log,
 	}))
 	t.Cleanup(srv.Close)
@@ -162,5 +167,38 @@ func TestMeta(t *testing.T) {
 	call(t, srv, http.MethodGet, "/api/v1/meta", "", &m)
 	if len(m.Palette) != 11 || m.Palette[0].ID != "1" || len(m.Types) != len(domain.DeadlineTypes) {
 		t.Fatalf("meta = %+v", m)
+	}
+}
+
+func TestMoodleEndpoints(t *testing.T) {
+	srv := newServer(t)
+	var st MoodleStatus
+	if code := call(t, srv, http.MethodGet, "/api/v1/moodle", "", &st); code != http.StatusOK || st.Connected {
+		t.Fatalf("sem conta: %d %+v", code, st)
+	}
+	var e errorBody
+	if code := call(t, srv, http.MethodPost, "/api/v1/moodle/login", `{"baseUrl":"http://inseguro","username":"a","password":"b"}`, &e); code != http.StatusUnprocessableEntity || e.Code != "invalid_url" {
+		t.Errorf("http: %d %+v", code, e)
+	}
+	if code := call(t, srv, http.MethodPost, "/api/v1/moodle/ical", `{"icalUrl":"ftp://x"}`, &e); code != http.StatusUnprocessableEntity || e.Code != "invalid_url" {
+		t.Errorf("ftp: %d %+v", code, e)
+	}
+	if strings.Contains(e.Error, "ftp://x") {
+		t.Error("a mensagem não pode ecoar a URL")
+	}
+}
+
+func TestDeadlinesWithoutMoodle(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	kv := memKV{}
+	accounts := account.NewService(kv, httpx.New(httpx.Options{}), log, "")
+	runner := sync.NewRunner(sync.NewService(accounts.Source(), domain.NormalizeOptions{}), nil, log)
+	srv := httptest.NewServer(New(Deps{Runner: runner, Accounts: accounts, Prefs: prefs.NewStore(kv), Token: token, Log: log,
+		GoogleReady: func(context.Context) bool { return false }}))
+	defer srv.Close()
+
+	var e errorBody
+	if code := call(t, srv, http.MethodGet, "/api/v1/deadlines", "", &e); code != http.StatusConflict || e.Code != "moodle_not_connected" {
+		t.Fatalf("deadlines sem Moodle: %d %+v", code, e)
 	}
 }
