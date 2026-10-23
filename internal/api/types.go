@@ -132,6 +132,7 @@ type MoodleStatus struct {
 	FullName    string         `json:"fullName,omitempty"`
 	SiteName    string         `json:"siteName,omitempty"`
 	ConnectedAt *time.Time     `json:"connectedAt,omitempty"`
+	NeedsReauth bool           `json:"needsReauth,omitempty"`
 	Events      int            `json:"events,omitempty"` // só na resposta de conexão
 }
 

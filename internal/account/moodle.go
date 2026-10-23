@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 	"github.com/GabrielLima2803/prazo-sync/internal/source"
 	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
@@ -55,12 +56,43 @@ func (s *Service) Source() source.Source {
 		if err != nil {
 			return nil, err
 		}
+		if m.NeedsReauth {
+			return nil, ErrReauthRequired
+		}
 		c, err := ical.NewClient(m.ICalURL, s.http)
 		if err != nil {
 			return nil, err
 		}
-		return ical.NewSource(c, s.log), nil
+		return &watchedSource{Source: ical.NewSource(c, s.log), svc: s, account: m}, nil
 	})
+}
+
+// watchedSource marca a conta quando o Moodle recusa a credencial.
+type watchedSource struct {
+	source.Source
+	svc     *Service
+	account Moodle
+}
+
+func (w *watchedSource) Fetch(ctx context.Context) ([]domain.Deadline, error) {
+	d, err := w.Source.Fetch(ctx)
+	if errors.Is(err, source.ErrUnauthorized) && w.account.Method != MethodEnv {
+		if markErr := w.svc.markReauth(ctx, w.account); markErr != nil {
+			w.svc.log.Error("marcar conta para novo login", "err", markErr)
+		}
+		w.svc.log.Warn("o Moodle recusou a URL do calendário; o usuário precisa entrar de novo")
+		return nil, ErrReauthRequired
+	}
+	return d, err
+}
+
+func (s *Service) markReauth(ctx context.Context, m Moodle) error {
+	m.NeedsReauth = true
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return s.kv.Put(ctx, store.KeyMoodle, b)
 }
 
 // ConnectWithLogin troca usuário e senha por um token de web service, pede ao

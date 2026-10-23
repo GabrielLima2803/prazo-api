@@ -3,9 +3,15 @@ package source
 
 import (
 	"context"
+	"errors"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
+
+// ErrUnauthorized indica que a fonte recusou a credencial (no Moodle: a
+// senha mudou e a URL do iCal deixou de valer). Diferente de uma falha
+// passageira, tentar de novo não adianta: o usuário precisa entrar de novo.
+var ErrUnauthorized = errors.New("a fonte recusou a credencial")
 
 // Source devolve todos os prazos conhecidos pela fonte, sem filtros nem
 // agrupamento (isso é responsabilidade de domain.Normalize).

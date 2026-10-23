@@ -7,6 +7,8 @@ import (
 	"math/rand/v2"
 	gosync "sync"
 	"time"
+
+	"github.com/GabrielLima2803/prazo-sync/internal/source"
 )
 
 var ErrBusy = errors.New("já existe uma sincronização em andamento")
@@ -109,6 +111,11 @@ func (r *Runner) Plan(ctx context.Context, maxAge time.Duration) (Plan, error) {
 		return *cached, nil
 	}
 	p, err := r.svc.Plan(ctx)
+	if errors.Is(err, source.ErrUnauthorized) {
+		// Mostrar o plano antigo esconderia que nada mais está sincronizando.
+		r.Invalidate()
+		return Plan{}, err
+	}
 	if err != nil {
 		if cached != nil {
 			r.log.Warn("fonte indisponível; usando o último plano", "err", err)

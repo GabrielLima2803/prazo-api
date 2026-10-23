@@ -29,6 +29,9 @@ type Moodle struct {
 	FullName    string    `json:"fullName,omitempty"`
 	SiteName    string    `json:"siteName,omitempty"`
 	ConnectedAt time.Time `json:"connectedAt"`
+	// NeedsReauth: o Moodle recusou a URL do iCal (senha trocada). Fica
+	// marcado até o próximo login, para não bater no Moodle à toa.
+	NeedsReauth bool `json:"needsReauth,omitempty"`
 }
 
 // Owner é a conta do Moodle dona do servidor. Enquanto o Prazo for de um

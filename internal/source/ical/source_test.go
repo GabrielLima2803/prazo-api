@@ -14,6 +14,7 @@ import (
 
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/source"
 )
 
 var t0 = time.Date(2026, 11, 17, 5, 5, 2, 0, time.UTC)
@@ -115,5 +116,25 @@ func TestSourceFetchRealFixture(t *testing.T) {
 		if n > 1 {
 			t.Errorf("atividade duplicada após normalizar: %s (%d)", k, n)
 		}
+	}
+}
+
+func TestFetchDistinguishesRejectedToken(t *testing.T) {
+	for body, want := range map[string]error{
+		"Invalid authentication":                  ErrAuthRejected,
+		"<html><body>Em manutenção</body></html>": ErrNotICalendar,
+	} {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			io.WriteString(w, body)
+		}))
+		client, _ := NewClient(srv.URL+"/calendar/export_execute.php?authtoken=x", httpx.New(httpx.Options{Transport: srv.Client().Transport}))
+		_, err := client.Fetch(context.Background())
+		if !errors.Is(err, want) {
+			t.Errorf("%q: err = %v; quer %v", body, err, want)
+		}
+		srv.Close()
+	}
+	if !errors.Is(ErrAuthRejected, source.ErrUnauthorized) {
+		t.Error("ErrAuthRejected deveria ser source.ErrUnauthorized")
 	}
 }

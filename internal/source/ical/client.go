@@ -9,6 +9,8 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 )
 
+var invalidAuth = []byte("Invalid authentication")
+
 func NewClient(exportURL string, http *httpx.Client) (*Client, error) {
 	u, err := url.Parse(exportURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
@@ -28,7 +30,12 @@ func (c *Client) Fetch(ctx context.Context) (Feed, error) {
 	if err != nil {
 		return Feed{}, fmt.Errorf("fetch ical: %w", err)
 	}
-	// O Moodle responde 200 com HTML quando o authtoken é inválido.
+	// O Moodle responde 200 nos dois casos: com o texto exato "Invalid
+	// authentication" quando o authtoken não vale mais (senha trocada), e com
+	// uma página HTML em manutenção ou erro. Só o primeiro exige novo login.
+	if bytes.Equal(bytes.TrimSpace(body), invalidAuth) {
+		return Feed{}, ErrAuthRejected
+	}
 	if !bytes.Contains(body[:min(len(body), 512)], []byte("BEGIN:VCALENDAR")) {
 		return Feed{}, ErrNotICalendar
 	}

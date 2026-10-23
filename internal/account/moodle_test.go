@@ -3,6 +3,7 @@ package account
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/source"
 	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
 	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
@@ -66,6 +68,8 @@ func fakeMoodle(t *testing.T, withExport bool) *httptest.Server {
 			case "core_calendar_get_calendar_export_token":
 				io.WriteString(w, `{"token":"`+exportToken+`","warnings":[]}`)
 			}
+		case "/rejeitado":
+			io.WriteString(w, "Invalid authentication")
 		case "/calendar/export_execute.php":
 			if r.URL.Query().Get("authtoken") != exportToken || r.URL.Query().Get("userid") != "42" {
 				io.WriteString(w, "<html>login</html>")
@@ -195,5 +199,38 @@ func TestOwnerFromEnv(t *testing.T) {
 	// O login devolve userid 42, mas o servidor é do 99 (PRAZO_ICAL_URL).
 	if _, _, err := newService(srv, memKV{}, env).ConnectWithLogin(context.Background(), srv.URL, "aluno", password); !errors.Is(err, ErrNotOwner) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRejectedTokenMarksReauth(t *testing.T) {
+	ctx := context.Background()
+	srv := fakeMoodle(t, true)
+	kv := memKV{}
+	s := newService(srv, kv, "")
+	if _, _, err := s.ConnectWithLogin(ctx, srv.URL, "aluno", password); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simula a troca de senha: a URL salva passa a receber "Invalid authentication".
+	var m Moodle
+	json.Unmarshal(kv[store.KeyMoodle], &m)
+	m.ICalURL = srv.URL + "/rejeitado"
+	b, _ := json.Marshal(m)
+	kv[store.KeyMoodle] = b
+
+	if _, err := s.Source().Fetch(ctx); !errors.Is(err, ErrReauthRequired) || !errors.Is(err, source.ErrUnauthorized) {
+		t.Fatalf("err = %v", err)
+	}
+	saved, _ := s.Moodle(ctx)
+	if !saved.NeedsReauth {
+		t.Fatal("a conta deveria ficar marcada")
+	}
+
+	// Novo login limpa a marca.
+	if _, _, err := s.ConnectWithLogin(ctx, srv.URL, "aluno", password); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.Moodle(ctx); again.NeedsReauth {
+		t.Fatal("o novo login deveria limpar a marca")
 	}
 }

@@ -47,7 +47,20 @@ prazos e avisa que falta o `prazo auth`.
 Erros trazem um `code` estável além da mensagem: `moodle_not_connected` (409 em
 `/deadlines` e `/courses`), `invalid_login`, `export_unavailable`,
 `service_unavailable`, `invalid_url`, `not_icalendar`, `empty_feed`,
-`moodle_unreachable`.
+`moodle_unreachable`, `moodle_reauth`.
+
+## Senha do Moodle trocada
+
+O authtoken da URL do iCal é derivado da senha. Quando ela muda, o Moodle
+responde `200` com o texto exato `Invalid authentication` (diferente da
+página HTML de manutenção). O servidor então:
+
+1. marca a conta (`needsReauth`) e para de chamar o Moodle até o próximo login;
+2. não serve o plano antigo do cache, para não esconder que a sincronização parou;
+3. responde `409 moodle_reauth` em `/deadlines` e `/courses`.
+
+O app volta para o login com o aviso "Sua senha do Moodle mudou"; entrar de
+novo gera a URL nova e mantém as preferências e a agenda.
 
 ## Preferências
 

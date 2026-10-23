@@ -13,6 +13,7 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
+	"github.com/GabrielLima2803/prazo-sync/internal/source"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
@@ -71,6 +72,10 @@ func (s *server) load(ctx context.Context, refresh bool) (view, error) {
 func planError(w http.ResponseWriter, err error) {
 	if errors.Is(err, account.ErrNotConnected) {
 		writeCodedError(w, http.StatusConflict, "moodle_not_connected", err)
+		return
+	}
+	if errors.Is(err, source.ErrUnauthorized) {
+		writeCodedError(w, http.StatusConflict, "moodle_reauth", err)
 		return
 	}
 	writeError(w, http.StatusBadGateway, fmt.Errorf("não foi possível ler o Moodle: %w", err))

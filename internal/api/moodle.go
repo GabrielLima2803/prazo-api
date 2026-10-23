@@ -92,7 +92,7 @@ func connectError(err error) (int, string) {
 }
 
 func toMoodleStatus(m account.Moodle, events int) MoodleStatus {
-	st := MoodleStatus{Connected: true, Method: m.Method, BaseURL: m.BaseURL, FullName: m.FullName, SiteName: m.SiteName, Events: events}
+	st := MoodleStatus{Connected: true, Method: m.Method, BaseURL: m.BaseURL, FullName: m.FullName, SiteName: m.SiteName, Events: events, NeedsReauth: m.NeedsReauth}
 	if !m.ConnectedAt.IsZero() {
 		at := m.ConnectedAt
 		st.ConnectedAt = &at
