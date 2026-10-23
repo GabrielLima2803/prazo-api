@@ -17,12 +17,12 @@ Google:
 |---|---|---|
 | 0 | Descoberta (`prazo doctor`) | ✅ concluída |
 | 1 | Leitura e normalização (`prazo sync --dry-run`) | ✅ concluída |
-| 2 | Google Agenda (`prazo auth`, `prazo sync`) | ⏭ próxima |
+| 2 | Google Agenda (`prazo auth`, `prazo sync`) | 🔄 código pronto; falta o teste com a conta real |
 | 3 | Estado (SQLite), diff e deletes seguros | pendente |
 | 4 | Serviço (`prazo serve`), healthcheck e Docker de produção | pendente |
 | 5 | Web services e status de entrega (✅) | pendente |
 | 6 | Resumos via Telegram | pendente |
-| 7 | Multiusuário (opcional) | pendente |
+| 7 | App móvel com personalização | planejada |
 
 ## Índice
 

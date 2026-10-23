@@ -69,7 +69,7 @@ Formato curto: contexto → decisão → consequência.
   testar sem mexer no ambiente do processo.
 - **Consequência:** quem configura vê tudo o que está errado de uma vez.
 
-## D8. Escopo OAuth do Google: `calendar.app.created` (Fase 2)
+## D8. Escopo OAuth do Google: `calendar.app.created`
 
 - **Contexto:** o Prazo só precisa mexer na agenda que ele mesmo cria.
 - **Decisão:** usar `https://www.googleapis.com/auth/calendar.app.created`, e
@@ -77,11 +77,12 @@ Formato curto: contexto → decisão → consequência.
 - **Consequência:** o Prazo não consegue ler nem alterar a agenda principal do
   usuário. Se o token vazar, o estrago fica restrito à agenda "Prazo — UDESC".
 
-## D9. ID de evento determinístico no Google (Fase 2)
+## D9. ID de evento determinístico no Google
 
-- **Decisão:** o id do evento no Google é derivado do `SourceID`, codificado
-  em base32hex minúsculo (o Google aceita `a-v` e `0-9`, de 5 a 1024
-  caracteres). Um `insert` repetido devolve 409 e vira `update`.
+- **Decisão:** o id do evento no Google é `prazo:<SourceID>` codificado em
+  base32hex minúsculo (o Google aceita `a-v` e `0-9`, de 5 a 1024
+  caracteres; acima disso, usa o SHA-256). Um `insert` repetido devolve 409 e
+  vira `update`, o que também restaura um evento apagado à mão.
 - **Consequência:** a operação é idempotente mesmo que o processo caia no meio
   da sincronização, sem duplicar eventos.
 
@@ -91,3 +92,61 @@ Formato curto: contexto → decisão → consequência.
   - build em etapas, com cache do BuildKit para os módulos Go e para a compilação;
   - imagem final `gcr.io/distroless/static-debian12:nonroot` (~9 MB), rodando como UID 65532;
   - no compose: filesystem `read_only`, `cap_drop: ALL` e `no-new-privileges`.
+
+## D11. Google API oficial e Go 1.26
+
+- **Contexto:** a especificação pede `google.golang.org/api/calendar/v3` e
+  `x/oauth2`. A versão fixada (v0.301.0, publicada há mais de duas semanas)
+  exige `x/oauth2` v0.37, que exige Go 1.26.
+- **Decisão:** subir o projeto para Go 1.26 e usar a biblioteca oficial.
+- **Consequência:** a biblioteca traz dependências indiretas pesadas (gRPC,
+  OpenTelemetry), e a imagem foi de ~9 MB para ~19 MB. Em troca, os tipos da
+  API, os erros (`googleapi.Error` com `reason`) e o OAuth seguem os da
+  própria Google. Só o pacote `calendar/google` importa essa biblioteca.
+
+## D12. Horário do evento: real quando existe, 30 min terminando no prazo
+
+- **Contexto:** no Moodle, quase todo prazo é um instante (DTSTART = DTEND).
+  Um evento de duração zero quase não aparece na grade da agenda.
+- **Decisão:**
+  - prazo pontual → bloco de 30 min que **termina** no prazo, para que a hora
+    final mostrada seja o limite real;
+  - Início e Término da mesma atividade a até 12 h → um evento com o intervalo
+    real (prova online das 19h às 21h);
+  - eventos com duração própria mantêm a duração.
+  Aprovado pelo usuário em 23/10/2026.
+- **Consequência:** questionários abertos por vários dias continuam sendo só
+  o Término. Só provas com intervalo real marcam a agenda como "ocupado".
+
+## D13. Horizonte: tudo o que o Moodle exporta
+
+- **Contexto:** o usuário quer o semestre inteiro, e não só os próximos dias.
+  A exportação "Eventos recentes e próximos" do CCT já cobre o semestre.
+- **Decisão:** sincronizar tudo, com `PRAZO_SYNC_SINCE` (AAAA-MM-DD) opcional
+  para cortar prazos antigos.
+- **Consequência:** prazos que saem da exportação por serem antigos **não**
+  podem ser apagados da agenda. A Fase 3 só apaga o que sumiu e ainda estava
+  no futuro.
+
+## D14. Segredos em arquivos cifrados até o SQLite
+
+- **Decisão:** a interface `store.KV` com a implementação `filekv`: um arquivo
+  `<chave>.enc` por segredo, permissão 0600, escrita atômica (temporário +
+  rename), AES-256-GCM com o nome da chave como AAD.
+- **Consequência:** a Fase 3 troca a implementação por SQLite sem mexer no
+  `sync` nem no `calendar/google`. O AAD impede trocar o arquivo de um segredo
+  pelo de outro.
+
+## D15. OAuth de app instalado: loopback + PKCE
+
+- **Decisão:** um servidor temporário em `127.0.0.1`, com `state` aleatório
+  (comparado em tempo constante), PKCE S256, `access_type=offline` e
+  `prompt=consent` para garantir o refresh token. O comando confere se o
+  escopo foi realmente concedido (o Google permite desmarcar a caixa).
+- **Consequência:** funciona no terminal sem colar código. No Docker, o
+  servidor escuta em `0.0.0.0:8085` com a porta publicada só em `127.0.0.1`,
+  e o redirect continua sendo `127.0.0.1`.
+- **App móvel (futuro):** o mesmo projeto do Google Cloud vai ganhar
+  credenciais "Aplicativo da Web" (para o servidor) e Android/iOS (para o
+  login no app). A credencial de computador continua servindo à linha de
+  comando.

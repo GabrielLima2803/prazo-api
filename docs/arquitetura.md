@@ -15,16 +15,22 @@ flowchart LR
     MOODLE[moodle<br/>convenções do Moodle<br/>puro, sem I/O]
     DOMAIN[domain<br/>Deadline, Normalize,<br/>Filter, título, hash]
     SYNC[sync<br/>caso de uso]
-    CAL[calendar<br/>Google Agenda<br/>Fase 2]
-    STORE[store<br/>SQLite<br/>Fase 3]
+    CAL[calendar<br/>Deadline → Event<br/>interface Sink]
+    GOOGLE[calendar/google<br/>Calendar API + OAuth]
+    STORE[store<br/>interface KV]
+    FILEKV[store/filekv<br/>arquivos cifrados<br/>SQLite na Fase 3]
+    CRYPTO[crypto<br/>AES-256-GCM]
 
     ICAL -- usa --> MOODLE
     WS -- usa --> MOODLE
     MOODLE -- produz --> DOMAIN
     ICAL -- "[]domain.Deadline" --> SYNC
     SYNC --> DOMAIN
-    SYNC -.-> CAL
-    SYNC -.-> STORE
+    SYNC --> CAL
+    GOOGLE -. implementa .-> CAL
+    SYNC --> STORE
+    FILEKV -. implementa .-> STORE
+    FILEKV --> CRYPTO
 ```
 
 ## Pacotes
@@ -32,17 +38,24 @@ flowchart LR
 ```
 cmd/prazo/                 composição: flags, config, dependências; sem regra de negócio
 internal/
+├── calendar/              Deadline → Event (id, cor, lembretes, janela) e a interface Sink
+│   ├── google/            Sink com a Calendar API; OAuth loopback + PKCE
+│   └── calendartest/      Sink em memória para testes
 ├── collections/           Set[T] e Counter[K] genéricos
 ├── config/                variáveis de ambiente → Config (valida tudo e reporta todos os erros)
+├── crypto/                AES-256-GCM com versão e AAD (segredos em repouso)
 ├── domain/                entidades e regras puras
 ├── moodle/                interpretação de convenções do Moodle (nomes de evento, shortnames)
 ├── source/                interface Source
 │   ├── ical/              cliente e parser da exportação iCal + adaptador para Source
 │   └── webservice/        cliente da API REST e dos endpoints públicos do app
-├── sync/                  caso de uso: Service.Plan (Fase 1); diff/apply nas Fases 2–3
+├── store/                 interface KV e chaves conhecidas
+│   └── filekv/            KV em arquivos cifrados (0600, escrita atômica)
+├── sync/                  caso de uso: Plan (ler + normalizar) e Sync (aplicar no destino)
 ├── doctor/                diagnóstico da instância (coleta separada da impressão)
 ├── httpx/                 HTTP com retry, backoff + jitter, limite de concorrência e de corpo
-└── logging/               slog com redação de segredos
+├── logging/               slog com redação de segredos
+└── retry/                 backoff exponencial com full jitter (usado por httpx e google)
 testdata/                  fixtures .ics (sintético + real anonimizado do CCT)
 docs/                      esta documentação
 ```
@@ -63,12 +76,16 @@ Todos seguem o mesmo padrão:
 - `domain` só importa a stdlib e `collections`.
 - `moodle` importa `domain` (produz `DeadlineType`/`Phase`) e nunca faz I/O.
 - `source/*` importam `domain` e `moodle`. Uma fonte nunca importa outra.
-- `sync` depende da **interface** `source.Source`, não das implementações.
+- `sync` depende das **interfaces** `source.Source`, `calendar.Sink` e
+  `store.KV`, nunca das implementações.
+- `calendar` não conhece o Google; `calendar/google` é a única parte que
+  importa a API do Google.
 - Só o `cmd/prazo` conhece todas as peças e as conecta.
 
 Interfaces só existem onde há mais de uma implementação real ou um fake de
-teste: `source.Source` (iCal e webservice, e o fake do `sync`) e, na Fase 2,
-`calendar.Sink`.
+teste: `source.Source` (iCal e webservice, e o fake do `sync`),
+`calendar.Sink` (Google e `calendartest`) e `store.KV` (arquivos agora,
+SQLite na Fase 3).
 
 ## Tipos centrais
 
@@ -108,6 +125,8 @@ Função pura, aplicada nesta ordem:
    título normalizado, com um `map[string]Set[Phase]`.
    - Havendo Término, o Início é descartado (a menos que `IncludeOpenings`).
    - A "conclusão esperada" é descartada quando existe Término ou prazo de entrega.
+   - Início e Término a até 12 h um do outro viram **um intervalo** com o
+     horário real (ex.: prova online das 19h às 21h).
 2. **Descarta** os prazos de correção, que só interessam a professores.
 3. **Aplica os filtros** do usuário: disciplina, tipo e regex de título. A busca
    é O(1) com `Set`.
@@ -134,6 +153,28 @@ com os prazos, a quantidade bruta recebida e o instante do cálculo. O relógio
 
 `Plan.Upcoming(window)` recorta a janela usada na tabela do dry-run.
 
+`Service.Sync(ctx, Target)` calcula o plano e aplica cada prazo no `Sink`:
+
+- garante a agenda dedicada (recria se o usuário apagou) e guarda o id no `KV`;
+- faz upsert de cada evento: o id é determinístico, então repetir não duplica;
+- uma falha isolada não interrompe os demais; `calendar.ErrAuth`,
+  `calendar.ErrCalendarGone` e cancelamento interrompem;
+- **não apaga nada** até a Fase 3, que traz o estado necessário para
+  distinguir "apagado no Moodle" de "saiu da janela da exportação".
+
+### `calendar.Event`
+
+`calendar.FromDeadline` traduz o prazo para a agenda:
+
+| Aspecto | Regra |
+|---|---|
+| id | base32hex de `prazo:<SourceID>` (alfabeto `a-v0-9` do Google) |
+| janela | intervalo real quando existe; senão 30 min **terminando** no prazo |
+| cor | FNV da sigla → `colorId` 1–11, estável entre execuções |
+| lembretes | entrega 3d/1d/2h · prova 7d/1d · questionário 1d/2h · demais 1d · nenhum se entregue |
+| ocupado | só provas com intervalo real bloqueiam a agenda; prazos ficam "livre" |
+| metadados | `extendedProperties.private`: `source_id`, `content_hash` |
+
 ## Tratamento de erros
 
 - Os erros sempre carregam contexto: `fmt.Errorf("fetch ical: %w", err)`.
@@ -148,7 +189,7 @@ com os prazos, a quantidade bruta recebida e o instante do cálculo. O relógio
 ## Fuso horário
 
 O domínio inteiro trabalha em UTC. A conversão para `America/Sao_Paulo`
-(configurável em `PRAZO_TIMEZONE`) acontece só na borda: tabela, mensagens e,
-na Fase 2, o evento do Google.
+(configurável em `PRAZO_TIMEZONE`) acontece só na borda: tabela, mensagens,
+o fuso da agenda criada e o `timeZone` de cada evento.
 
 O binário embute o `time/tzdata`, então funciona na imagem distroless.

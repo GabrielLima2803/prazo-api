@@ -44,35 +44,28 @@ disciplina reconhecidos.
 - `cmd/prazo` com registro de comandos e um `app` com as dependências
   compartilhadas.
 
+### Fase 2: Google Agenda 🔄
+
+Código pronto e testado com fakes; falta a primeira execução com a conta real.
+
+- `internal/crypto`: AES-256-GCM com versão, nonce aleatório e AAD.
+- `internal/store` + `filekv`: segredos em arquivos cifrados até o SQLite.
+- `prazo keygen`: gera a `PRAZO_MASTER_KEY`.
+- `prazo auth`: OAuth loopback com PKCE e `state`, escopo
+  `calendar.app.created`, verificação do refresh token e do escopo concedido.
+- `internal/calendar`: `Deadline → Event` neutro, com id determinístico, cor
+  por disciplina, lembretes por tipo, horário real ou 30 min terminando no
+  prazo, e `Busy` só para provas com intervalo.
+- `internal/calendar/google`: `Sink` com upsert (insert → 409 → update),
+  recriação da agenda apagada, retry em 429/5xx/403 de cota e `ErrAuth`.
+- `prazo sync`: semestre inteiro, sem apagar nada; falhas isoladas não param
+  a execução.
+- Docker em Go 1.26; credencial via `secret` do compose.
+
+Com dados reais: 55 eventos → 41 prazos (40 do semestre 2026/2 e 1 evento
+pessoal de abril).
+
 ## Próximos passos
-
-### Fase 2: Google Agenda (próxima)
-
-Pré-requisito do usuário: criar um projeto no Google Cloud, ativar a Calendar
-API e criar uma credencial OAuth do tipo **"App para computador"**.
-
-1. **`internal/crypto`**: AES-256-GCM com `PRAZO_MASTER_KEY` (32 bytes em
-   base64), nonce aleatório por registro, `Seal`/`Open`, testes de ida e volta
-   e de adulteração.
-2. **`prazo auth`**: fluxo OAuth por loopback (`127.0.0.1:<porta aleatória>`)
-   com PKCE e `state`, escopo `calendar.app.created` (D8). O refresh token é
-   salvo criptografado. Até o SQLite da Fase 3, num arquivo `0600` em `/data`.
-3. **`internal/calendar`**:
-   - interface `Sink` (`EnsureCalendar`, `Upsert`, `Delete`), uma implementação
-     Google e uma fake para testes;
-   - ID determinístico em base32hex derivado do `SourceID` (D9);
-   - `extendedProperties.private`: `source_id` e `content_hash`;
-   - cor estável por disciplina: hash da sigla → `colorId` 1–11;
-   - lembretes por tipo: entrega → 3 dias, 1 dia e 2 h; prova → 7 dias e 1 dia;
-   - sem lembretes quando `Submitted`;
-   - fuso `America/Sao_Paulo` no evento;
-   - prazos de duração zero viram eventos de 30 min que **terminam** no prazo;
-   - backoff em 403 `rateLimitExceeded` e 429.
-4. **`prazo sync`** (sem `--dry-run`): `EnsureCalendar("Prazo — UDESC")` e
-   upsert de tudo. Ainda sem estado: o upsert idempotente garante que não
-   duplica.
-5. **Horizonte**: sincronizar só dos **últimos 7 dias em diante**. Ainda
-   precisa da confirmação do usuário.
 
 ### Fase 3: Estado e diff
 
@@ -122,17 +115,27 @@ API e criar uma credencial OAuth do tipo **"App para computador"**.
 - `internal/notify` com Telegram (bot token + chat id).
 - Resumo diário às 7h e semanal no domingo à noite, agrupado por dia.
 
-### Fase 7: Multiusuário (opcional)
+### Fase 7: App móvel
 
-- Página web mínima para outros alunos conectarem Moodle e Google.
-- `user_id` em todas as tabelas e criptografia por usuário.
-- Limite de sincronizações concorrentes.
+O usuário quer um app com mais personalização. Arquitetura recomendada: o
+servidor Go continua fazendo a sincronização (em segundo plano, mesmo com o
+celular desligado) e o app é a interface.
+
+- API HTTP no `prazo serve`: preferências (filtros, cores, lembretes por
+  tipo, horário do evento), status da última sincronização, "sincronizar agora".
+- No mesmo projeto do Google Cloud: credencial **"Aplicativo da Web"** para o
+  servidor trocar o código do login, e **Android/iOS** para o login no app.
+- Multiusuário: `user_id` em todas as tabelas, criptografia por usuário e
+  limite de sincronizações concorrentes.
+- Login do Moodle pelo app (token via `launch.php`, como o app oficial).
 
 ## Pontos em aberto
 
-| # | Questão | Proposta |
+| # | Questão | Situação |
 |---|---|---|
-| 1 | Horizonte inicial da agenda | últimos 7 dias em diante |
-| 2 | Evento de prazo (duração zero) no Google | 30 min terminando no prazo, para aparecer na grade |
+| 1 | Horizonte inicial da agenda | ✅ tudo o que o Moodle exporta (D13) |
+| 2 | Evento de prazo (duração zero) no Google | ✅ horário real ou 30 min terminando no prazo (D12) |
 | 3 | Rótulo do `groupselect` | hoje é "Atividade"; talvez "Grupo" |
 | 4 | Atividades com o mesmo nome na mesma disciplina | resolvido na Fase 5 com o id do módulo |
+| 5 | Evento pessoal antigo (abril) entra na agenda | usar `PRAZO_SYNC_SINCE` ou um filtro de eventos pessoais |
+| 6 | Stack do app móvel | a decidir na Fase 7 |

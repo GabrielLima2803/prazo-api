@@ -4,8 +4,8 @@ Sincroniza prazos, entregas, provas e eventos do Moodle da UDESC com uma agenda
 dedicada no Google Agenda: título padronizado, cor por disciplina, lembretes por
 tipo, filtros e status de entrega.
 
-> Em construção. Fases 0 (descoberta) e 1 (leitura) concluídas; a próxima é a
-> integração com o Google. Detalhes em [docs/roadmap.md](docs/roadmap.md).
+> Em construção. Fases 0 (descoberta) e 1 (leitura) concluídas; Fase 2
+> (Google Agenda) implementada. Detalhes em [docs/roadmap.md](docs/roadmap.md).
 
 ```
 $ prazo sync --dry-run
@@ -23,16 +23,20 @@ ter 27/10 02:04  6d 6h   [AMS] Atividade: Definição de grupo para MVP
 2. Configure e rode:
 
 ```sh
-cp .env.example .env          # cole a URL em PRAZO_ICAL_URL
+cp .env.example .env               # cole a URL em PRAZO_ICAL_URL (entre aspas simples)
+go run ./cmd/prazo keygen          # cole o resultado em PRAZO_MASTER_KEY
 set -a; . ./.env; set +a
 go run ./cmd/prazo doctor          # diagnóstico
-go run ./cmd/prazo sync --dry-run  # próximos 30 dias
+go run ./cmd/prazo sync --dry-run  # próximos 30 dias, sem escrever nada
 ```
 
-Com Docker:
+3. Google Agenda: crie uma credencial OAuth **"App para computador"** no Google
+   Cloud Console (passo a passo em [docs/desenvolvimento.md](docs/desenvolvimento.md#google-agenda)),
+   salve o JSON em `secrets/google-oauth.json` e rode:
 
 ```sh
-docker compose run --rm prazo
+go run ./cmd/prazo auth   # abre o consentimento do Google; o token fica cifrado em data/
+go run ./cmd/prazo sync   # cria a agenda "Prazo — UDESC" e envia os prazos
 ```
 
 ## Documentação
