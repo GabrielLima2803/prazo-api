@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"os"
 	"testing"
 
 	"golang.org/x/oauth2"
@@ -82,4 +83,19 @@ func mustQuery(t *testing.T, raw string) url.Values {
 		t.Fatal(err)
 	}
 	return u.Query()
+}
+
+func TestLoadWebConfig(t *testing.T) {
+	dir := t.TempDir()
+	web := dir + "/web.json"
+	os.WriteFile(web, []byte(`{"web":{"client_id":"id.apps.googleusercontent.com","client_secret":"s","auth_uri":"x","token_uri":"y"}}`), 0o600)
+	cfg, err := LoadWebConfig(web)
+	if err != nil || cfg.ClientID != "id.apps.googleusercontent.com" || cfg.Endpoint.TokenURL == "" {
+		t.Fatalf("cfg = %+v, %v", cfg, err)
+	}
+	installed := dir + "/installed.json"
+	os.WriteFile(installed, []byte(`{"installed":{"client_id":"id","client_secret":"s"}}`), 0o600)
+	if _, err := LoadWebConfig(installed); err == nil {
+		t.Error("aceitou credencial de computador como web")
+	}
 }

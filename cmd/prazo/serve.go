@@ -67,7 +67,9 @@ func runServe(ctx context.Context, a *app, args []string) error {
 		return fmt.Errorf("escutar em %s: %w", *addr, err)
 	}
 	a.log.Info("API no ar", "addr", ln.Addr().String(), "intervalo", interval.String())
-	if u := reachableURL(ln.Addr()); u != "" {
+	if u := a.cfg.Server.PublicURL; u != "" {
+		fmt.Fprintf(a.stdout, "No app, use o servidor: %s\n", u)
+	} else if u := reachableURL(ln.Addr()); u != "" {
 		fmt.Fprintf(a.stdout, "No app, use o servidor: %s\n", u)
 	}
 

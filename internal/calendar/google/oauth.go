@@ -35,6 +35,32 @@ func LoadConfig(path string) (*oauth2.Config, error) {
 	return cfg, nil
 }
 
+// LoadWebConfig lê a credencial "Aplicativo da Web". Não usa
+// google.ConfigFromJSON porque ela exige redirect_uris no arquivo, e o
+// redirecionamento vem de PRAZO_PUBLIC_URL (o JSON baixado antes de cadastrar
+// o URI não traz o campo).
+func LoadWebConfig(path string) (*oauth2.Config, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("credencial web do Google: %w", err)
+	}
+	var f struct {
+		Web *struct {
+			ClientID     string `json:"client_id"`
+			ClientSecret string `json:"client_secret"`
+		} `json:"web"`
+	}
+	if err := json.Unmarshal(b, &f); err != nil || f.Web == nil || f.Web.ClientID == "" || f.Web.ClientSecret == "" {
+		return nil, fmt.Errorf("credencial web do Google em %s: esperava uma credencial do tipo \"Aplicativo da Web\"", path)
+	}
+	return &oauth2.Config{
+		ClientID:     f.Web.ClientID,
+		ClientSecret: f.Web.ClientSecret,
+		Endpoint:     googleoauth.Endpoint,
+		Scopes:       []string{Scope},
+	}, nil
+}
+
 // Authorize executa o fluxo de app instalado: sobe um servidor em addr, pede
 // que o usuário abra a URL recebida em show e troca o código pelo token.
 // O redirect é sempre para 127.0.0.1 na porta escutada, o que permite

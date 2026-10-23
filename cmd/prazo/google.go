@@ -74,7 +74,7 @@ func (a *app) webOAuthConfig() (*oauth2.Config, error) {
 	if a.cfg.Google.WebCredentialsFile == "" {
 		return nil, nil
 	}
-	return google.LoadConfig(a.cfg.Google.WebCredentialsFile)
+	return google.LoadWebConfig(a.cfg.Google.WebCredentialsFile)
 }
 
 // googleSink renova o token com a mesma credencial que o emitiu.
