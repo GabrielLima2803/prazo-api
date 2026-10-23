@@ -7,3 +7,5 @@
 # build
 /prazo
 /bin/
+client_secret*.json
+/secrets/

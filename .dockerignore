@@ -9,3 +9,5 @@ Dockerfile
 docker-compose.yml
 README.md
 docs/
+client_secret*.json
+secrets/
