@@ -82,6 +82,8 @@ lugares diferentes (`./data` e o volume `prazo-data`): autorize em cada um.
 | `PRAZO_SYNC_INTERVAL` | `30m` | intervalo da sincronização automática do `serve` (mínimo `1m`) |
 | `PRAZO_PUBLIC_URL` | (vazio) | `https://…` público do servidor; ativa a autorização do Google pelo app |
 | `PRAZO_GOOGLE_WEB_CREDENTIALS` | (vazio) | JSON da credencial "Aplicativo da Web" |
+| `PRAZO_MOODLE_HOSTS` | Moodles da UDESC | hosts em que o app aceita login, separados por vírgula |
+| `PRAZO_MAX_USERS` | `50` | limite de usuários do servidor (0 = sem limite) |
 | `PRAZO_SYNC_SINCE` | (vazio) | `AAAA-MM-DD`: ignora prazos anteriores; vazio = tudo o que o Moodle exporta |
 | `PRAZO_IGNORE_COURSES` | (vazio) | siglas ou shortnames a ignorar, separados por vírgula |
 | `PRAZO_IGNORE_TYPES` | (vazio) | `assign`, `quiz`, `forum`, `exam`, `course_event`, `other` |
@@ -129,23 +131,20 @@ sistema (a imagem Alpine de build não tem tzdata).
 
 ## Docker
 
+Produção (o que fica rodando):
+
 ```sh
-docker build --target test .     # go vet + go test dentro do build
-docker compose build
-setfacl -m u:65532:r secrets/google-oauth.json   # o container (UID 65532) precisa ler a credencial
-docker compose run --rm -p 127.0.0.1:8085:8085 prazo auth -addr 0.0.0.0:8085
-docker compose run --rm prazo    # sync
-docker compose run --rm prazo sync --dry-run
+docker compose up -d --build     # prazo serve, reinicia sozinho
+docker compose logs -f
+docker compose ps                # (healthy) quando o /healthz responde
 ```
 
-O Dockerfile tem estas etapas:
+- Roda com o seu usuário (`user: 1000:1000`) e monta `./data` e
+  `./secrets` (só leitura): os arquivos continuam 0600, sem ACL.
+- Publica só `127.0.0.1:8080`; o Tailscale Funnel no host expõe em HTTPS.
+- `prazo healthcheck` é o HEALTHCHECK (a imagem distroless não tem curl).
 
-| Etapa | O que faz |
-|---|---|
-| `deps` | `go mod download`, com cache em `/go/pkg/mod`; só refaz quando `go.mod`/`go.sum` mudam |
-| `build` | compila com cache em `/root/.cache/go-build` (rebuild incremental) |
-| `test` | `go vet` + `go test` |
-| `final` | distroless, não-root, ~19 MB |
+Testes dentro do build: `docker build --target test .`
 
 ## Convenções de código
 

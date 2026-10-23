@@ -18,11 +18,11 @@ Google:
 | 0 | Descoberta (`prazo doctor`) | ✅ concluída |
 | 1 | Leitura e normalização (`prazo sync --dry-run`) | ✅ concluída |
 | 2 | Google Agenda (`prazo auth`, `prazo sync`) | ✅ concluída |
-| 3 | Estado (SQLite), diff e deletes seguros | pendente |
-| 4 | Serviço (`prazo serve`), healthcheck e Docker de produção | 🔄 `serve` com API e sync periódico; falta Docker de produção |
-| 5 | Web services e status de entrega (✅) | pendente |
-| 6 | Resumos via Telegram | pendente |
-| 7 | App móvel com personalização | 🔄 [prazo-app](https://github.com/GabrielLima2803/prazo-app) (Expo) funcionando na rede local |
+| 3 | Estado, diff e remoção segura | ✅ concluída sem banco (estado em arquivos cifrados); SQLite adiado |
+| 4 | Serviço (`prazo serve`), Docker de produção | ✅ concluída |
+| 5 | Web services e status de entrega (✅) | ✅ login pelo Moodle e status de entrega |
+| 6 | ~~Resumos via Telegram~~ | removida a pedido |
+| 7 | App móvel e multiusuário | ✅ app ([prazo-app](https://github.com/GabrielLima2803/prazo-app)) e multiusuário; falta publicar os builds |
 
 ## Índice
 

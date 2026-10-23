@@ -211,3 +211,35 @@ Formato curto: contexto → decisão → consequência.
 - **Consequência:** a mesma tela serve para quando o servidor virar
   multiusuário (Fase 7): a regra do dono vira "cada conta tem o próprio
   espaço".
+
+## D20. Multiusuário sem banco de dados (por enquanto)
+
+- **Contexto:** o usuário quer que amigos usem o app, mas prefere adiar o
+  SQLite.
+- **Decisão:** um namespace por usuário no mesmo `filekv` (`u<id>_<chave>`),
+  com um registro global de usuários e de sessões. O id é
+  `sha256(host|userid)[:8]` em hex, estável e sem expor o userid nos nomes
+  de arquivo. A regra do "dono" (D19) vira a lista de Moodles permitidos.
+- **Consequência:** serve bem para dezenas de usuários. A troca por SQLite
+  fica isolada atrás de `store.KV`.
+
+## D21. Diff e remoção segura com estado em arquivo
+
+- **Decisão:** cada usuário guarda `sync_state` (SourceID → id do evento,
+  hash do evento e fim do prazo). O hash cobre tudo o que vai para o Google,
+  inclusive cor e lembretes, então mudar uma preferência reenvia só o
+  necessário. Remoções: ocultos sempre; sumidos do Moodle só se ainda no
+  futuro e se não passarem de 30% (mínimo 3); antigos só saem do estado.
+- **Consequência:** a maior parte das execuções não chama o Google. Uma
+  exportação parcial do Moodle não apaga a agenda de ninguém.
+
+## D22. Status de entrega por "visto como pendente e saiu"
+
+- **Contexto:** `core_calendar_get_action_events_by_timesort` só lista o que
+  ainda exige ação. Ausência na lista também acontece em atividades sem
+  envio pelo Moodle.
+- **Decisão:** só marcar como entregue o que já apareceu como pendente numa
+  busca anterior e saiu da lista antes do prazo (`pending_seen`).
+- **Consequência:** sem falsos ✅. A marca aparece a partir da segunda busca
+  depois do login, e só para contas que entraram com usuário e senha (que
+  têm token de web service).

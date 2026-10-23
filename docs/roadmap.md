@@ -78,69 +78,42 @@ pessoal de abril).
   TypeScript, Expo Router, React Query, tema claro/escuro, modo demonstração.
   Testado ponta a ponta contra o servidor com os dados reais.
 
+### Multiusuário, diff e remoção segura ✅
+
+- `internal/tenant`: cada aluno tem um espaço próprio no KV (`u<id>_*`):
+  conta do Moodle, token do Google, preferências, estado da sincronização.
+  O id é um hash do host + userid do Moodle. Limite `PRAZO_MAX_USERS`.
+- Login aceito só nos Moodles de `PRAZO_MOODLE_HOSTS` (os da UDESC).
+- Sessões do app ligadas a um usuário (até 10 aparelhos por pessoa).
+- Sincronização de todos, um de cada vez, a cada `PRAZO_SYNC_INTERVAL`.
+- Migração automática da instalação de um usuário só, sem duplicar a agenda.
+- `sync` guarda o que está na agenda (`sync_state`): só envia o que mudou
+  (com dados reais, 41 iguais em 0,5 s em vez de 41 chamadas em 30 s); apaga
+  o que foi ocultado ou removido do Moodle; prazo antigo que saiu da
+  exportação só é esquecido; mais de 30% sumindo de uma vez bloqueia as
+  remoções.
+- Status de entrega: um prazo vira ✅ (e perde os lembretes) quando já
+  apareceu como pendente no Moodle e saiu da lista antes do prazo.
+- Docker de produção: `prazo serve` com `prazo healthcheck`,
+  `restart: unless-stopped`, dados e segredos montados do host.
+
 ## Próximos passos
 
-### Fase 3: Estado e diff
+### Publicar os builds do app
 
-- `internal/store`:
-  - interface de repositório e implementação SQLite (`modernc.org/sqlite`, sem CGO);
-  - migrations versionadas em `migrations/`;
-  - tabelas `deadlines` (`source_id`, `google_event_id`, `content_hash`,
-    `deleted_at`), `sync_runs` e `secrets`.
-- Diff em `sync`:
-  - novo → create;
-  - hash diferente → update;
-  - igual → no-op;
-  - sumiu → delete, **só** se o fetch foi completo;
-  - **proteção contra apagar em massa**: se mais de X% (configurável, padrão
-    30%) sumiu de uma vez, aborta e loga um alerta.
-- Persistir o estado em transação, só depois de o Google confirmar.
-- Registrar uma linha em `sync_runs` por execução.
-- Testes:
-  - idempotência: a segunda execução não faz nenhuma escrita;
-  - resiliência: fonte com erro ou vazia não apaga nada;
-  - apagar em massa é bloqueado.
+- Android: `npx eas-cli build -p android --profile preview` gera um APK
+  (precisa de conta grátis no expo.dev). Alternativa: build local com o SDK
+  do Android.
+- iPhone: TestFlight exige a conta de desenvolvedor da Apple (US$ 99/ano);
+  sem ela, Expo Go + EAS Update.
+- Google Cloud: cada amigo precisa estar em "Usuários de teste" (até 100)
+  enquanto o app do Google não for verificado.
 
-### Fase 4: Serviço
+### Depois
 
-- `prazo serve`:
-  - ticker com jitter (padrão 30 min);
-  - lock que impede duas sincronizações ao mesmo tempo;
-  - graceful shutdown (`SIGTERM`).
-- HTTP:
-  - `/healthz` (o processo está vivo);
-  - `/readyz` (o último sync deu certo dentro de 2 intervalos).
-- Compose com `restart: unless-stopped`, healthcheck e comando `serve`.
-
-### Fase 5: Web services e status de entrega
-
-- `source/webservice` implementa `source.Source`, usando
-  `core_calendar_get_action_events_by_timesort` mais
-  `mod_assign_get_submission_status`.
-- Fallback automático para o iCal quando o token falha ou o serviço está
-  desabilitado, com uma mensagem clara.
-- A chave de agrupamento passa a usar o id do módulo, que é exato (D3).
-- `Submitted` → prefixo `✅` e remoção dos lembretes.
-- Token via SSO (`launch.php`) para contas id.udesc/office365.
-
-### Fase 6: Notificações
-
-- `internal/notify` com Telegram (bot token + chat id).
-- Resumo diário às 7h e semanal no domingo à noite, agrupado por dia.
-
-### Fase 7: App móvel
-
-O usuário quer um app com mais personalização. Arquitetura recomendada: o
-servidor Go continua fazendo a sincronização (em segundo plano, mesmo com o
-celular desligado) e o app é a interface.
-
-- API HTTP no `prazo serve`: preferências (filtros, cores, lembretes por
-  tipo, horário do evento), status da última sincronização, "sincronizar agora".
-- No mesmo projeto do Google Cloud: credencial **"Aplicativo da Web"** para o
-  servidor trocar o código do login, e **Android/iOS** para o login no app.
-- Multiusuário: `user_id` em todas as tabelas, criptografia por usuário e
-  limite de sincronizações concorrentes.
-- Login do Moodle pelo app (token via `launch.php`, como o app oficial).
+- SQLite no lugar dos arquivos cifrados (a interface `store.KV` já isola).
+- Servidor sempre ligado (VPS ou Raspberry Pi) em vez do PC.
+- Token de web service do Moodle via SSO (`launch.php`) para contas id.udesc.
 
 ## Pontos em aberto
 
