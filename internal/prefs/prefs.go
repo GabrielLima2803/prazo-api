@@ -21,7 +21,7 @@ func NewStore(kv store.KV) *Store { return &Store{kv: kv} }
 func (s *Store) Load(ctx context.Context) (Preferences, error) {
 	b, err := s.kv.Get(ctx, store.KeyPreferences)
 	if errors.Is(err, store.ErrNotFound) {
-		return Preferences{}, nil
+		return Preferences{}.Normalized(), nil
 	}
 	if err != nil {
 		return Preferences{}, err
@@ -46,7 +46,8 @@ func (s *Store) Save(ctx context.Context, p Preferences) (Preferences, error) {
 }
 
 // Normalized põe siglas em maiúsculas, ordena e remove duplicados, para que
-// a mesma escolha sempre gere o mesmo JSON.
+// a mesma escolha sempre gere o mesmo JSON. Listas e mapas nunca ficam nil:
+// o app recebe [] e {}, e não null.
 func (p Preferences) Normalized() Preferences {
 	out := Preferences{
 		HiddenCourses: uniqueSorted(p.HiddenCourses, strings.ToUpper),

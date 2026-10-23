@@ -2,6 +2,7 @@ package prefs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -69,5 +70,16 @@ func TestHidesAndStyle(t *testing.T) {
 	}
 	if r := p.Style().Reminders[domain.TypeAssign]; len(r) != 1 || r[0] != 90*time.Minute {
 		t.Errorf("Style = %v", r)
+	}
+}
+
+func TestEmptyPreferencesEncodeAsEmptyCollections(t *testing.T) {
+	p, err := NewStore(memKV{}).Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(p)
+	if want := `{"hiddenCourses":[],"hiddenTypes":[],"courseColors":{},"reminders":{}}`; string(b) != want {
+		t.Fatalf("JSON = %s; quer %s", b, want)
 	}
 }
