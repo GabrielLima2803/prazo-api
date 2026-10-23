@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 // templates em ordem de prioridade. Fonte: pacotes de idioma do Moodle 4.4

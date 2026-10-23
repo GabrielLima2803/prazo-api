@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"prazo/internal/crypto"
-	"prazo/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 var validKey = regexp.MustCompile(`^[a-z0-9_]+$`)

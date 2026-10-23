@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"prazo/internal/calendar"
-	"prazo/internal/calendar/calendartest"
-	"prazo/internal/domain"
-	"prazo/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar/calendartest"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 type memKV map[string][]byte

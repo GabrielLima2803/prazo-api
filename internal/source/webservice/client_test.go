@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"prazo/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 )
 
 func newTestClient(t *testing.T, h http.HandlerFunc) *Client {

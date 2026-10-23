@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"prazo/internal/calendar"
-	"prazo/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 // Sync calcula o plano e aplica todos os prazos no destino. Por enquanto não

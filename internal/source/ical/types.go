@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"prazo/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 )
 
 // Event é um VEVENT cru, sem regra de negócio aplicada.

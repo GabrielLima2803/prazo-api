@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"prazo/internal/retry"
+	"github.com/GabrielLima2803/prazo-sync/internal/retry"
 )
 
 // backoff usa full jitter; um Retry-After do servidor tem precedência.

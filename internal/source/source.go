@@ -4,7 +4,7 @@ package source
 import (
 	"context"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 // Source devolve todos os prazos conhecidos pela fonte, sem filtros nem

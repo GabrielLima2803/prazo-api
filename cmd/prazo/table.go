@@ -6,7 +6,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 var weekdays = [...]string{"dom", "seg", "ter", "qua", "qui", "sex", "sáb"}

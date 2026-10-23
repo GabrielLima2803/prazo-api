@@ -6,9 +6,9 @@ import (
 	"slices"
 	"time"
 
-	"prazo/internal/collections"
-	"prazo/internal/moodle"
-	"prazo/internal/source/ical"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
 )
 
 const (

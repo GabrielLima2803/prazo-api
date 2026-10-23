@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"prazo/internal/logging"
+	"github.com/GabrielLima2803/prazo-sync/internal/logging"
 )
 
 var ErrBodyTooLarge = errors.New("resposta maior que o limite")

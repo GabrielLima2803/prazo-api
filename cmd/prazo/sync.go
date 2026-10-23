@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"prazo/internal/calendar"
-	"prazo/internal/source/ical"
-	"prazo/internal/sync"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
+	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
 func runSync(ctx context.Context, a *app, args []string) error {

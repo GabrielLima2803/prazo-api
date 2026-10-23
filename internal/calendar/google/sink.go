@@ -9,8 +9,8 @@ import (
 	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
 
-	"prazo/internal/calendar"
-	"prazo/internal/retry"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/retry"
 )
 
 // NewSink usa hc para todas as chamadas; em produção é o cliente do oauth2,

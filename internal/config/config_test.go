@@ -6,7 +6,7 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 func envFrom(m map[string]string) func(string) string {

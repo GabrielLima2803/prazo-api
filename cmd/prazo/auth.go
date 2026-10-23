@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"prazo/internal/calendar/google"
-	"prazo/internal/crypto"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
+	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
 )
 
 func runAuth(ctx context.Context, a *app, args []string) error {

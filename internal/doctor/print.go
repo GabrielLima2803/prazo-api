@@ -7,8 +7,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"prazo/internal/collections"
-	"prazo/internal/logging"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/logging"
 )
 
 type printer struct{ w io.Writer }

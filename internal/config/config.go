@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"prazo/internal/collections"
-	"prazo/internal/crypto"
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 const (

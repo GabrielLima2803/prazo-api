@@ -4,10 +4,10 @@ package sync
 import (
 	"time"
 
-	"prazo/internal/calendar"
-	"prazo/internal/domain"
-	"prazo/internal/source"
-	"prazo/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/source"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 type Service struct {

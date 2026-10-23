@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"prazo/internal/domain"
-	"prazo/internal/source"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/source"
 )
 
 type Option func(*Service)

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"time"
 
-	"prazo/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
 )
 
 type DeadlineType string

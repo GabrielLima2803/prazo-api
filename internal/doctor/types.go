@@ -5,9 +5,9 @@ package doctor
 import (
 	"time"
 
-	"prazo/internal/collections"
-	"prazo/internal/moodle"
-	"prazo/internal/source/webservice"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
 )
 
 // Result guarda o resultado de uma verificação que pode falhar ou não ter

@@ -3,7 +3,7 @@ package moodle
 import (
 	"testing"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 func TestParseEventName(t *testing.T) {

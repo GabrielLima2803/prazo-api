@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"prazo/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
 )
 
 var t0 = time.Date(2026, 10, 21, 2, 59, 0, 0, time.UTC)

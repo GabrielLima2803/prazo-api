@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"prazo/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 )
 
 func NewClient(exportURL string, http *httpx.Client) (*Client, error) {

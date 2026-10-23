@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"prazo/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
 )
 
 const redacted = "REDACTED"

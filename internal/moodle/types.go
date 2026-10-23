@@ -2,7 +2,7 @@
 // de disciplina). É puro: não faz I/O e é compartilhado pelas fontes.
 package moodle
 
-import "prazo/internal/domain"
+import "github.com/GabrielLima2803/prazo-sync/internal/domain"
 
 // EventName é o resultado de interpretar o nome de um evento do calendário.
 type EventName struct {

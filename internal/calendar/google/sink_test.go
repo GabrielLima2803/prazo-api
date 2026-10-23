@@ -15,7 +15,7 @@ import (
 
 	"google.golang.org/api/option"
 
-	"prazo/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 )
 
 // fakeAPI imita os endpoints da Calendar API usados pelo Sink.

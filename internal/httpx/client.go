@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"prazo/internal/retry"
+	"github.com/GabrielLima2803/prazo-sync/internal/retry"
 )
 
 func New(o Options) *Client {
@@ -31,7 +31,7 @@ func New(o Options) *Client {
 		o.Concurrency = 1
 	}
 	if o.UserAgent == "" {
-		o.UserAgent = "prazo/0.1"
+		o.UserAgent = "github.com/GabrielLima2803/prazo-sync/0.1"
 	}
 	return &Client{
 		http:       &http.Client{Timeout: o.Timeout, Transport: o.Transport},

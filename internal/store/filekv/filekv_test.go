@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"prazo/internal/crypto"
-	"prazo/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 func newStore(t *testing.T, dir string) *Store {

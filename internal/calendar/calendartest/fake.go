@@ -8,7 +8,7 @@ import (
 	"slices"
 	"sync"
 
-	"prazo/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 )
 
 type Fake struct {

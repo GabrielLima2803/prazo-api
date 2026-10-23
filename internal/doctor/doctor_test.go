@@ -11,9 +11,9 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"prazo/internal/httpx"
-	"prazo/internal/source/ical"
-	"prazo/internal/source/webservice"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
 )
 
 func loadFeed(t *testing.T, path string) ical.Feed {

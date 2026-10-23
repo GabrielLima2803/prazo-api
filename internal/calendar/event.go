@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 // InstantDuration é a duração do evento de um prazo pontual. O evento termina

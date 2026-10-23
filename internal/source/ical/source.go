@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"prazo/internal/collections"
-	"prazo/internal/domain"
-	"prazo/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
 )
 
 func NewSource(client *Client, log *slog.Logger) *Source {

@@ -12,9 +12,9 @@ import (
 	"syscall"
 	_ "time/tzdata" // binário independente do tzdata do sistema (imagem distroless)
 
-	"prazo/internal/config"
-	"prazo/internal/httpx"
-	"prazo/internal/logging"
+	"github.com/GabrielLima2803/prazo-sync/internal/config"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/logging"
 )
 
 // app reúne as dependências compartilhadas pelos comandos.

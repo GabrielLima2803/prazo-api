@@ -11,10 +11,10 @@ import (
 
 	"golang.org/x/term"
 
-	"prazo/internal/doctor"
-	"prazo/internal/logging"
-	"prazo/internal/source/ical"
-	"prazo/internal/source/webservice"
+	"github.com/GabrielLima2803/prazo-sync/internal/doctor"
+	"github.com/GabrielLima2803/prazo-sync/internal/logging"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
 )
 
 const doctorUsage = `Lê a URL do iCal de PRAZO_ICAL_URL. Nunca passe a URL como argumento: ela

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"prazo/internal/domain"
-	"prazo/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 )
 
 var t0 = time.Date(2026, 11, 17, 5, 5, 2, 0, time.UTC)

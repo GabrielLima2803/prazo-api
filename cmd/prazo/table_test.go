@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 var now = time.Date(2026, 10, 20, 22, 0, 0, 0, time.UTC)

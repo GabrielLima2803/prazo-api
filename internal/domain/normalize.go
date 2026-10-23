@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"prazo/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
 )
 
 func (f Filter) Skip(d Deadline) bool {

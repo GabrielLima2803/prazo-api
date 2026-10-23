@@ -5,8 +5,8 @@ package webservice
 import (
 	"fmt"
 
-	"prazo/internal/collections"
-	"prazo/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/collections"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 )
 
 const MobileService = "moodle_mobile_app"

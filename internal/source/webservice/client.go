@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"prazo/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
 )
 
 func NewClient(baseURL string, http *httpx.Client) *Client {

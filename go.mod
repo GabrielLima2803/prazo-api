@@ -1,4 +1,4 @@
-module prazo
+module github.com/GabrielLima2803/prazo-sync
 
 go 1.26.0
 

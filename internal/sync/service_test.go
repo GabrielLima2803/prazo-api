@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"prazo/internal/domain"
+	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
 type fakeSource struct {

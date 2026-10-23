@@ -3,8 +3,8 @@ package doctor
 import (
 	"context"
 
-	"prazo/internal/moodle"
-	"prazo/internal/source/webservice"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
 )
 
 const pendingLimit = 50

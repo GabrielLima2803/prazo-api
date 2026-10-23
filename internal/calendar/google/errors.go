@@ -7,7 +7,7 @@ import (
 	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
 
-	"prazo/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 )
 
 var (

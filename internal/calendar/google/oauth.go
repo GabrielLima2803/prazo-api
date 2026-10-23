@@ -18,7 +18,7 @@ import (
 	"golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
 
-	"prazo/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 // LoadConfig lê o JSON da credencial OAuth "App para computador" baixado do
