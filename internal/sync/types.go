@@ -2,6 +2,7 @@
 package sync
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
@@ -15,6 +16,7 @@ type Service struct {
 	source source.Source
 	opts   domain.NormalizeOptions
 	now    func() time.Time
+	log    *slog.Logger
 }
 
 // Plan é o estado desejado calculado a partir da fonte.
@@ -33,11 +35,37 @@ type Target struct {
 }
 
 type Report struct {
-	Plan       Plan
-	CalendarID string
-	Created    int
-	Updated    int
-	Hidden     int // ocultos pelas preferências; não enviados
-	Failed     int
-	Err        error // falhas individuais (errors.Join); a execução seguiu
+	Plan          Plan
+	CalendarID    string
+	Created       int
+	Updated       int
+	Unchanged     int // iguais ao que já está no destino; nada enviado
+	Deleted       int
+	DeleteBlocked int // remoções seguradas pela proteção contra apagar em massa
+	Hidden        int // ocultos pelas preferências
+	Failed        int
+	Err           error // falhas individuais (errors.Join); a execução seguiu
 }
+
+// state é o que o Prazo já pôs na agenda, por SourceID. Permite enviar só o
+// que mudou e saber o que apagar.
+type state struct {
+	CalendarID string                 `json:"calendarId"`
+	Events     map[string]syncedEvent `json:"events"`
+}
+
+type syncedEvent struct {
+	EventID string    `json:"eventId"`
+	Hash    string    `json:"hash"`
+	EndsAt  time.Time `json:"endsAt"`
+}
+
+// Proteção contra apagar em massa: se mais que isso sumir de uma vez do
+// Moodle, algo deu errado na fonte (ex.: exportação parcial) e nada é apagado.
+const (
+	maxDeleteRatio = 0.3
+	minDeleteGuard = 3
+	// Prazos que já passaram somem da exportação do Moodle com o tempo; isso
+	// não é motivo para apagar o evento da agenda.
+	pastGrace = 24 * time.Hour
+)

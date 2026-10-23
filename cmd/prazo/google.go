@@ -12,6 +12,7 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
 	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
 	"github.com/GabrielLima2803/prazo-sync/internal/store/filekv"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
@@ -45,7 +46,7 @@ func (a *app) oauthConfig() (*oauth2.Config, error) {
 
 // target monta o destino a cada execução: lê o token e as preferências na
 // hora, para que "prazo auth" e mudanças no app valham sem reiniciar.
-func (a *app) target(kv *filekv.Store) sync.TargetFunc {
+func (a *app) target(kv store.KV) sync.TargetFunc {
 	ps := prefs.NewStore(kv)
 	return func(ctx context.Context) (sync.Target, error) {
 		sink, err := a.googleSink(ctx, kv)
@@ -78,7 +79,7 @@ func (a *app) webOAuthConfig() (*oauth2.Config, error) {
 }
 
 // googleSink renova o token com a mesma credencial que o emitiu.
-func (a *app) googleSink(ctx context.Context, kv *filekv.Store) (*google.Sink, error) {
+func (a *app) googleSink(ctx context.Context, kv store.KV) (*google.Sink, error) {
 	st, err := google.LoadToken(ctx, kv)
 	if err != nil {
 		return nil, err

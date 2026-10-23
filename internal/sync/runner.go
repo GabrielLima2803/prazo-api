@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"math/rand/v2"
 	gosync "sync"
 	"time"
 
@@ -95,6 +94,14 @@ func (r *Runner) Last() (Run, bool) {
 	return *r.last, true
 }
 
+// SetNextRun informa quando será a próxima execução agendada (quem agenda é
+// o tenant.Manager, para todos os usuários).
+func (r *Runner) SetNextRun(t time.Time) {
+	r.mu.Lock()
+	r.nextRun = t
+	r.mu.Unlock()
+}
+
 func (r *Runner) NextRun() time.Time {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -127,34 +134,4 @@ func (r *Runner) Plan(ctx context.Context, maxAge time.Duration) (Plan, error) {
 	r.plan = &p
 	r.mu.Unlock()
 	return p, nil
-}
-
-// Loop sincroniza já e depois a cada interval, com ±10% de jitter para não
-// bater sempre no mesmo minuto. Para quando ctx é cancelado.
-func (r *Runner) Loop(ctx context.Context, interval time.Duration) {
-	for {
-		if _, err := r.RunNow(ctx); errors.Is(err, context.Canceled) {
-			return
-		}
-		wait := jitter(interval)
-		r.mu.Lock()
-		r.nextRun = r.now().Add(wait).UTC()
-		r.mu.Unlock()
-
-		t := time.NewTimer(wait)
-		select {
-		case <-ctx.Done():
-			t.Stop()
-			return
-		case <-t.C:
-		}
-	}
-}
-
-func jitter(d time.Duration) time.Duration {
-	spread := int64(d) / 10
-	if spread <= 0 {
-		return d
-	}
-	return d + time.Duration(rand.Int64N(2*spread)-spread)
 }

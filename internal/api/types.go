@@ -9,26 +9,28 @@ import (
 
 	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/session"
-	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+	"github.com/GabrielLima2803/prazo-sync/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 type Deps struct {
-	Runner       *sync.Runner
-	Accounts     *account.Service
-	Sessions     *session.Service
-	Prefs        *prefs.Store
-	Token        string
-	CalendarName string
-	// GoogleReady diz se já existe autorização do Google guardada.
-	GoogleReady func(ctx context.Context) bool
+	Tenants  *tenant.Manager
+	Auth     *account.Authenticator
+	Sessions *session.Service
+	// Token é o PRAZO_API_TOKEN (terminal e administração); age como
+	// AdminTenant.
+	Token       string
+	AdminTenant func(ctx context.Context) (*tenant.Tenant, error)
+	// GoogleReady diz se o usuário já tem autorização do Google guardada.
+	GoogleReady func(ctx context.Context, kv store.KV) bool
 	// GoogleAuth é nil quando a autorização pelo app não foi configurada
 	// (falta PRAZO_PUBLIC_URL ou a credencial web).
-	GoogleAuth  GoogleAuth
-	Log         *slog.Logger
-	PlanMaxAge  time.Duration
-	SyncTimeout time.Duration
+	GoogleAuth   GoogleAuth
+	CalendarName string
+	Log          *slog.Logger
+	PlanMaxAge   time.Duration
+	SyncTimeout  time.Duration
 }
 
 type Deadline struct {
@@ -84,9 +86,9 @@ type Google struct {
 
 // GoogleAuth inicia e conclui a autorização do Google começada no app.
 type GoogleAuth interface {
-	Start(returnTo string) (authURL string, err error)
-	Finish(ctx context.Context, state, code string) (returnTo string, err error)
-	Disconnect(ctx context.Context) error
+	Start(userID, returnTo string) (authURL string, err error)
+	Finish(ctx context.Context, state, code string) (userID, returnTo string, err error)
+	Disconnect(ctx context.Context, userID string) error
 }
 
 type googleAuthRequest struct {
@@ -98,15 +100,18 @@ type googleAuthResponse struct {
 }
 
 type Run struct {
-	StartedAt  time.Time `json:"startedAt"`
-	FinishedAt time.Time `json:"finishedAt"`
-	OK         bool      `json:"ok"`
-	Error      string    `json:"error,omitempty"`
-	Total      int       `json:"total"`
-	Created    int       `json:"created"`
-	Updated    int       `json:"updated"`
-	Hidden     int       `json:"hidden"`
-	Failed     int       `json:"failed"`
+	StartedAt     time.Time `json:"startedAt"`
+	FinishedAt    time.Time `json:"finishedAt"`
+	OK            bool      `json:"ok"`
+	Error         string    `json:"error,omitempty"`
+	Total         int       `json:"total"`
+	Created       int       `json:"created"`
+	Updated       int       `json:"updated"`
+	Unchanged     int       `json:"unchanged"`
+	Deleted       int       `json:"deleted"`
+	DeleteBlocked int       `json:"deleteBlocked"`
+	Hidden        int       `json:"hidden"`
+	Failed        int       `json:"failed"`
 }
 
 type Meta struct {

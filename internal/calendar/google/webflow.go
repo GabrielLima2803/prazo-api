@@ -36,15 +36,16 @@ var appScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://`)
 // no celular: o Google devolve o código para PRAZO_PUBLIC_URL (HTTPS), e não
 // para 127.0.0.1.
 type AppAuth struct {
-	cfg *oauth2.Config
-	kv  store.KV
-	now func() time.Time
+	cfg   *oauth2.Config
+	kvFor func(userID string) store.KV
+	now   func() time.Time
 
 	mu      gosync.Mutex
 	pending map[string]pendingAuth
 }
 
 type pendingAuth struct {
+	userID   string
 	verifier string
 	returnTo string
 	expires  time.Time
@@ -52,17 +53,18 @@ type pendingAuth struct {
 
 // NewAppAuth recebe a credencial "Aplicativo da Web" e a URL pública do
 // servidor; o redirect registrado no Google Cloud é publicURL+CallbackPath.
-func NewAppAuth(cfg *oauth2.Config, publicURL string, kv store.KV) *AppAuth {
+// kvFor devolve o espaço do usuário onde o token é guardado.
+func NewAppAuth(cfg *oauth2.Config, publicURL string, kvFor func(userID string) store.KV) *AppAuth {
 	c := *cfg
 	c.RedirectURL = strings.TrimRight(publicURL, "/") + CallbackPath
-	return &AppAuth{cfg: &c, kv: kv, now: time.Now, pending: map[string]pendingAuth{}}
+	return &AppAuth{cfg: &c, kvFor: kvFor, now: time.Now, pending: map[string]pendingAuth{}}
 }
 
 func (a *AppAuth) RedirectURL() string { return a.cfg.RedirectURL }
 
-// Start devolve a URL de consentimento. returnTo (opcional) é para onde o
-// navegador volta ao final, normalmente o deep link do app.
-func (a *AppAuth) Start(returnTo string) (string, error) {
+// Start devolve a URL de consentimento para o usuário. returnTo (opcional) é
+// para onde o navegador volta ao final, normalmente o deep link do app.
+func (a *AppAuth) Start(userID, returnTo string) (string, error) {
 	if returnTo != "" && !validReturnTo(returnTo) {
 		return "", ErrInvalidReturnTo
 	}
@@ -76,37 +78,38 @@ func (a *AppAuth) Start(returnTo string) (string, error) {
 			delete(a.pending, k)
 		}
 	}
-	a.pending[state] = pendingAuth{verifier: verifier, returnTo: returnTo, expires: now.Add(pendingTTL)}
+	a.pending[state] = pendingAuth{userID: userID, verifier: verifier, returnTo: returnTo, expires: now.Add(pendingTTL)}
 	a.mu.Unlock()
 
 	return a.cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce, oauth2.S256ChallengeOption(verifier)), nil
 }
 
-// Finish troca o código pelo token e o guarda. Cada state vale uma vez.
-func (a *AppAuth) Finish(ctx context.Context, state, code string) (string, error) {
+// Finish troca o código pelo token e o guarda no espaço de quem começou a
+// autorização. Cada state vale uma vez.
+func (a *AppAuth) Finish(ctx context.Context, state, code string) (userID, returnTo string, err error) {
 	a.mu.Lock()
 	p, ok := a.pending[state]
 	delete(a.pending, state)
 	a.mu.Unlock()
 	if !ok || a.now().After(p.expires) {
-		return "", ErrUnknownState
+		return "", "", ErrUnknownState
 	}
 
 	tok, err := a.cfg.Exchange(ctx, code, oauth2.VerifierOption(p.verifier))
 	if err != nil {
-		return p.returnTo, fmt.Errorf("trocar código por token: %w", err)
+		return p.userID, p.returnTo, fmt.Errorf("trocar código por token: %w", err)
 	}
 	if tok.RefreshToken == "" {
-		return p.returnTo, ErrNoRefreshToken
+		return p.userID, p.returnTo, ErrNoRefreshToken
 	}
 	if granted, ok := tok.Extra("scope").(string); ok && !slices.Contains(strings.Fields(granted), Scope) {
-		return p.returnTo, ErrScopeDenied
+		return p.userID, p.returnTo, ErrScopeDenied
 	}
-	return p.returnTo, SaveToken(ctx, a.kv, ClientWeb, tok)
+	return p.userID, p.returnTo, SaveToken(ctx, a.kvFor(p.userID), ClientWeb, tok)
 }
 
-func (a *AppAuth) Disconnect(ctx context.Context) error {
-	return a.kv.Delete(ctx, store.KeyGoogleToken)
+func (a *AppAuth) Disconnect(ctx context.Context, userID string) error {
+	return a.kvFor(userID).Delete(ctx, store.KeyGoogleToken)
 }
 
 func validReturnTo(s string) bool {

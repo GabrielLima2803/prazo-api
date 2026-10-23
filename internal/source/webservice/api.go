@@ -23,12 +23,39 @@ func (c *Client) UserCourses(ctx context.Context, token string, userID int64) ([
 // PendingEvents lista eventos a partir de from que ainda exigem ação do aluno.
 // O id de cada evento é o mesmo número do UID no iCal.
 func (c *Client) PendingEvents(ctx context.Context, token string, from time.Time, limit int) ([]ActionEvent, error) {
+	return c.pendingPage(ctx, token, from, limit, 0)
+}
+
+// AllPendingEvents pagina PendingEvents (o Moodle devolve no máximo 50 por
+// vez) até maxPages.
+func (c *Client) AllPendingEvents(ctx context.Context, token string, from time.Time, maxPages int) ([]ActionEvent, error) {
+	const page = 50
+	var all []ActionEvent
+	var after int64
+	for range maxPages {
+		events, err := c.pendingPage(ctx, token, from, page, after)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, events...)
+		if len(events) < page {
+			break
+		}
+		after = events[len(events)-1].ID
+	}
+	return all, nil
+}
+
+func (c *Client) pendingPage(ctx context.Context, token string, from time.Time, limit int, afterID int64) ([]ActionEvent, error) {
 	var resp struct {
 		Events []ActionEvent `json:"events"`
 	}
 	args := url.Values{
 		"timesortfrom": {strconv.FormatInt(from.Unix(), 10)},
 		"limitnum":     {strconv.Itoa(limit)},
+	}
+	if afterID > 0 {
+		args.Set("aftereventid", strconv.FormatInt(afterID, 10))
 	}
 	err := c.Call(ctx, token, "core_calendar_get_action_events_by_timesort", args, &resp)
 	return resp.Events, err

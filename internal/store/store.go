@@ -1,5 +1,6 @@
-// Package store define onde o Prazo guarda estado. Até a Fase 3 (SQLite), o
-// estado é um conjunto pequeno de chaves em arquivos cifrados (filekv).
+// Package store define onde o Prazo guarda estado: chaves pequenas em arquivos
+// cifrados (filekv), com um namespace por usuário. A interface KV é o ponto de
+// troca para um banco de dados no futuro.
 package store
 
 import (
@@ -22,6 +23,30 @@ const (
 	KeyGoogleCalendar = "google_calendar_id"
 	KeyPreferences    = "preferences"
 	KeyMoodle         = "moodle_account"
-	KeySessions       = "app_sessions"
-	KeyOwner          = "owner"
+	KeySyncState      = "sync_state"
+	KeyPendingSeen    = "pending_seen"
+
+	// Chaves globais (fora dos namespaces de usuário).
+	KeySessions = "app_sessions"
+	KeyUsers    = "users"
 )
+
+// Namespace isola as chaves de um usuário dentro do mesmo KV.
+func Namespace(kv KV, prefix string) KV { return namespaced{kv: kv, prefix: prefix} }
+
+type namespaced struct {
+	kv     KV
+	prefix string
+}
+
+func (n namespaced) Get(ctx context.Context, key string) ([]byte, error) {
+	return n.kv.Get(ctx, n.prefix+key)
+}
+
+func (n namespaced) Put(ctx context.Context, key string, value []byte) error {
+	return n.kv.Put(ctx, n.prefix+key, value)
+}
+
+func (n namespaced) Delete(ctx context.Context, key string) error {
+	return n.kv.Delete(ctx, n.prefix+key)
+}

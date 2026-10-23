@@ -26,14 +26,14 @@ func (m memKV) Delete(_ context.Context, k string) error        { delete(m, k); 
 func newAppAuth(t *testing.T, kv store.KV, refresh string) *AppAuth {
 	srv := tokenServer(t, refresh, Scope)
 	cfg := &oauth2.Config{ClientID: "web-id", ClientSecret: "s", Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.example/auth", TokenURL: srv.URL}, Scopes: []string{Scope}}
-	return NewAppAuth(cfg, "https://prazo.example.ts.net/", kv)
+	return NewAppAuth(cfg, "https://prazo.example.ts.net/", func(string) store.KV { return kv })
 }
 
 func TestAppAuthFlow(t *testing.T) {
 	kv := memKV{}
 	a := newAppAuth(t, kv, "1//web")
 
-	authURL, err := a.Start("exp://192.168.0.14:8081/--/google")
+	authURL, err := a.Start("ana", "exp://192.168.0.14:8081/--/google")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,16 +42,16 @@ func TestAppAuthFlow(t *testing.T) {
 		t.Fatalf("auth URL = %s", authURL)
 	}
 
-	returnTo, err := a.Finish(context.Background(), q.Get("state"), "abc")
-	if err != nil || returnTo != "exp://192.168.0.14:8081/--/google" {
-		t.Fatalf("Finish = %q, %v", returnTo, err)
+	user, returnTo, err := a.Finish(context.Background(), q.Get("state"), "abc")
+	if err != nil || user != "ana" || returnTo != "exp://192.168.0.14:8081/--/google" {
+		t.Fatalf("Finish = %q %q, %v", user, returnTo, err)
 	}
 	st, err := LoadToken(context.Background(), kv)
 	if err != nil || st.Client != ClientWeb || st.Token.RefreshToken != "1//web" {
 		t.Fatalf("token salvo = %+v, %v", st, err)
 	}
 
-	if _, err := a.Finish(context.Background(), q.Get("state"), "abc"); !errors.Is(err, ErrUnknownState) {
+	if _, _, err := a.Finish(context.Background(), q.Get("state"), "abc"); !errors.Is(err, ErrUnknownState) {
 		t.Fatalf("state reutilizado: %v", err)
 	}
 }
@@ -59,11 +59,11 @@ func TestAppAuthFlow(t *testing.T) {
 func TestAppAuthRejects(t *testing.T) {
 	a := newAppAuth(t, memKV{}, "r")
 	for _, bad := range []string{"https://evil.example", "http://x", "javascript://alert(1)", "sem-esquema"} {
-		if _, err := a.Start(bad); !errors.Is(err, ErrInvalidReturnTo) {
+		if _, err := a.Start("ana", bad); !errors.Is(err, ErrInvalidReturnTo) {
 			t.Errorf("returnTo %q aceito", bad)
 		}
 	}
-	if _, err := a.Finish(context.Background(), "forjado", "abc"); !errors.Is(err, ErrUnknownState) {
+	if _, _, err := a.Finish(context.Background(), "forjado", "abc"); !errors.Is(err, ErrUnknownState) {
 		t.Errorf("state forjado: %v", err)
 	}
 }

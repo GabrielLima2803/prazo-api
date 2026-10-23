@@ -15,18 +15,20 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/source"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
+	t := tenantOf(r)
 	st := Status{
 		Now:    time.Now().UTC(),
-		Google: Google{Authorized: s.GoogleReady(r.Context()), CalendarName: s.CalendarName, AppAuth: s.GoogleAuth != nil},
+		Google: Google{Authorized: s.GoogleReady(r.Context(), t.KV), CalendarName: s.CalendarName, AppAuth: s.GoogleAuth != nil},
 	}
-	if last, ok := s.Runner.Last(); ok {
+	if last, ok := t.Runner.Last(); ok {
 		run := toRun(last)
 		st.LastRun = &run
 	}
-	if next := s.Runner.NextRun(); !next.IsZero() {
+	if next := t.Runner.NextRun(); !next.IsZero() {
 		st.NextRun = &next
 	}
 	writeJSON(w, http.StatusOK, st)
@@ -51,16 +53,16 @@ type view struct {
 	style calendar.Style
 }
 
-func (s *server) load(ctx context.Context, refresh bool) (view, error) {
+func (s *server) load(ctx context.Context, t *tenant.Tenant, refresh bool) (view, error) {
 	maxAge := s.PlanMaxAge
 	if refresh {
 		maxAge = 0
 	}
-	plan, err := s.Runner.Plan(ctx, maxAge)
+	plan, err := t.Runner.Plan(ctx, maxAge)
 	if err != nil {
 		return view{}, err
 	}
-	p, err := s.Prefs.Load(ctx)
+	p, err := t.Prefs.Load(ctx)
 	if err != nil {
 		return view{}, err
 	}
@@ -82,7 +84,7 @@ func planError(w http.ResponseWriter, err error) {
 }
 
 func (s *server) deadlines(w http.ResponseWriter, r *http.Request) {
-	v, err := s.load(r.Context(), r.URL.Query().Get("refresh") == "1")
+	v, err := s.load(r.Context(), tenantOf(r), r.URL.Query().Get("refresh") == "1")
 	if err != nil {
 		planError(w, err)
 		return
@@ -95,7 +97,7 @@ func (s *server) deadlines(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) courses(w http.ResponseWriter, r *http.Request) {
-	v, err := s.load(r.Context(), false)
+	v, err := s.load(r.Context(), tenantOf(r), false)
 	if err != nil {
 		planError(w, err)
 		return
@@ -130,7 +132,7 @@ func (s *server) courses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getPreferences(w http.ResponseWriter, r *http.Request) {
-	p, err := s.Prefs.Load(r.Context())
+	p, err := tenantOf(r).Prefs.Load(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -143,7 +145,7 @@ func (s *server) putPreferences(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	saved, err := s.Prefs.Save(r.Context(), p)
+	saved, err := tenantOf(r).Prefs.Save(r.Context(), p)
 	switch {
 	case errors.Is(err, prefs.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, err)
@@ -156,10 +158,10 @@ func (s *server) putPreferences(w http.ResponseWriter, r *http.Request) {
 
 // sync roda a sincronização na hora. O contexto não é o da requisição: se o
 // app fechar no meio, a sincronização termina mesmo assim.
-func (s *server) sync(w http.ResponseWriter, _ *http.Request) {
+func (s *server) sync(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.SyncTimeout)
 	defer cancel()
-	run, err := s.Runner.RunNow(ctx)
+	run, err := tenantOf(r).Runner.RunNow(ctx)
 	switch {
 	case errors.Is(err, sync.ErrBusy):
 		writeError(w, http.StatusConflict, err)
@@ -185,6 +187,7 @@ func toRun(r sync.Run) Run {
 	out := Run{
 		StartedAt: r.StartedAt, FinishedAt: r.FinishedAt, OK: r.Err == nil,
 		Total: len(r.Report.Plan.Deadlines), Created: r.Report.Created, Updated: r.Report.Updated,
+		Unchanged: r.Report.Unchanged, Deleted: r.Report.Deleted, DeleteBlocked: r.Report.DeleteBlocked,
 		Hidden: r.Report.Hidden, Failed: r.Report.Failed,
 	}
 	if r.Err != nil {

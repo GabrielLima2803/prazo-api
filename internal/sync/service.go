@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
@@ -16,8 +17,13 @@ func WithClock(now func() time.Time) Option {
 	return func(s *Service) { s.now = now }
 }
 
+// WithLogger define onde vão os avisos (ex.: remoções seguradas).
+func WithLogger(l *slog.Logger) Option {
+	return func(s *Service) { s.log = l }
+}
+
 func NewService(src source.Source, opts domain.NormalizeOptions, options ...Option) *Service {
-	s := &Service{source: src, opts: opts, now: time.Now}
+	s := &Service{source: src, opts: opts, now: time.Now, log: slog.New(slog.DiscardHandler)}
 	for _, o := range options {
 		o(s)
 	}

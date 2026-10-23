@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -52,9 +53,13 @@ func TestSyncIsIdempotent(t *testing.T) {
 		t.Fatal("id da agenda não foi guardado")
 	}
 
+	upserts := sink.Upserts
 	r2, err := svc.Sync(ctx, target(sink, kv))
-	if err != nil || r2.Created != 0 || r2.Updated != 3 || r2.CalendarID != r.CalendarID {
+	if err != nil || r2.Created+r2.Updated != 0 || r2.Unchanged != 3 || r2.CalendarID != r.CalendarID {
 		t.Fatalf("segunda execução: %+v, %v", r2, err)
+	}
+	if sink.Upserts != upserts {
+		t.Fatal("a segunda execução não deveria chamar o destino")
 	}
 	if n := len(sink.Events(r.CalendarID)); n != 3 {
 		t.Fatalf("eventos na agenda = %d; quer 3 (sem duplicar)", n)
@@ -115,5 +120,82 @@ func TestSyncAppliesPreferences(t *testing.T) {
 	r, err := NewService(threeDeadlines(), domain.NormalizeOptions{}).Sync(context.Background(), tg)
 	if err != nil || r.Created != 2 || r.Hidden != 1 {
 		t.Fatalf("report = %+v, err = %v", r, err)
+	}
+}
+
+// mutableSource permite mudar o que o "Moodle" devolve entre execuções.
+type mutableSource struct{ deadlines []domain.Deadline }
+
+func (m *mutableSource) Fetch(context.Context) ([]domain.Deadline, error) { return m.deadlines, nil }
+
+func dl(id string, at time.Time) domain.Deadline {
+	return domain.Deadline{SourceID: id, Title: id, Type: domain.TypeAssign, Phase: domain.PhaseDue, StartsAt: at, EndsAt: at}
+}
+
+func TestSyncDeletes(t *testing.T) {
+	ctx := context.Background()
+	future := now.Add(72 * time.Hour)
+	src := &mutableSource{}
+	for _, id := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"} {
+		src.deadlines = append(src.deadlines, dl(id, future))
+	}
+	src.deadlines = append(src.deadlines, dl("antigo", now.Add(-48*time.Hour)))
+	sink, kv := calendartest.New(), memKV{}
+	svc := NewService(src, domain.NormalizeOptions{}, WithClock(clock))
+	r, _ := svc.Sync(ctx, target(sink, kv))
+	if r.Created != 11 {
+		t.Fatalf("primeira: %+v", r)
+	}
+
+	// "b" sumiu do Moodle (futuro: apaga) e "antigo" saiu da janela (passado: só esquece).
+	src.deadlines = slices.DeleteFunc(slices.Clone(src.deadlines), func(d domain.Deadline) bool {
+		return d.SourceID == "b" || d.SourceID == "antigo"
+	})
+	r, err := svc.Sync(ctx, target(sink, kv))
+	if err != nil || r.Deleted != 1 || r.Unchanged != 9 {
+		t.Fatalf("remoção: %+v, %v", r, err)
+	}
+	if n := len(sink.Events(r.CalendarID)); n != 10 {
+		t.Fatalf("eventos = %d; quer 10 (o antigo continua na agenda)", n)
+	}
+
+	// Ocultar pelas preferências apaga o que já estava lá.
+	tg := target(sink, kv)
+	tg.Prefs = prefs.Preferences{HiddenTypes: []domain.DeadlineType{domain.TypeAssign}}
+	r, _ = svc.Sync(ctx, tg)
+	if r.Deleted != 9 || r.Hidden != 9 || r.DeleteBlocked != 0 {
+		t.Fatalf("ocultar: %+v", r)
+	}
+}
+
+func TestSyncBlocksMassDelete(t *testing.T) {
+	ctx := context.Background()
+	src := &mutableSource{}
+	for i := range 10 {
+		src.deadlines = append(src.deadlines, dl(string(rune('a'+i)), now.Add(72*time.Hour)))
+	}
+	sink, kv := calendartest.New(), memKV{}
+	svc := NewService(src, domain.NormalizeOptions{}, WithClock(clock))
+	svc.Sync(ctx, target(sink, kv))
+
+	src.deadlines = src.deadlines[:2] // 8 de 10 sumiram: exportação parcial?
+	r, err := svc.Sync(ctx, target(sink, kv))
+	if err != nil || r.Deleted != 0 || r.DeleteBlocked != 8 {
+		t.Fatalf("report = %+v, %v", r, err)
+	}
+	if n := len(sink.Events(r.CalendarID)); n != 10 {
+		t.Fatalf("eventos = %d; nada deveria ter sido apagado", n)
+	}
+}
+
+func TestSyncRecreatedCalendarResendsEverything(t *testing.T) {
+	ctx := context.Background()
+	sink, kv := calendartest.New(), memKV{}
+	svc := NewService(threeDeadlines(), domain.NormalizeOptions{}, WithClock(clock))
+	r, _ := svc.Sync(ctx, target(sink, kv))
+	sink.DeleteCalendar(r.CalendarID)
+	r2, _ := svc.Sync(ctx, target(sink, kv))
+	if r2.Created != 3 || r2.Unchanged != 0 {
+		t.Fatalf("agenda recriada: %+v", r2)
 	}
 }

@@ -25,7 +25,10 @@ const (
 	DefaultDataDir      = "data"
 	DefaultHTTPAddr     = "127.0.0.1:8080"
 	DefaultSyncInterval = 30 * time.Minute
-	MinAPITokenLen      = 32
+	DefaultMaxUsers     = 50
+	// Moodles da UDESC atendidos por padrão (cada centro tem o seu).
+	DefaultMoodleHosts = "moodle.joinville.udesc.br,www.moodle.udesc.br,moodle.udesc.br"
+	MinAPITokenLen     = 32
 )
 
 type Config struct {
@@ -50,9 +53,11 @@ type Storage struct {
 }
 
 type Moodle struct {
-	BaseURL string
-	ICalURL string // segredo: contém o authtoken
-	Token   string // segredo
+	// AllowedHosts são os Moodles em que o app aceita login.
+	AllowedHosts []string
+	BaseURL      string
+	ICalURL      string // segredo: contém o authtoken
+	Token        string // segredo
 }
 
 type Server struct {
@@ -60,6 +65,7 @@ type Server struct {
 	PublicURL    string // https://… pelo qual o Google e o celular alcançam o servidor
 	APIToken     string // segredo; exigido pelo "prazo serve"
 	SyncInterval time.Duration
+	MaxUsers     int // 0 = sem limite
 }
 
 type Log struct {
@@ -88,6 +94,7 @@ func load(getenv func(string) string) (Config, error) {
 			PublicURL:    strings.TrimRight(e.str("PRAZO_PUBLIC_URL", ""), "/"),
 			APIToken:     e.str("PRAZO_API_TOKEN", ""),
 			SyncInterval: e.duration("PRAZO_SYNC_INTERVAL", DefaultSyncInterval),
+			MaxUsers:     e.int("PRAZO_MAX_USERS", DefaultMaxUsers),
 		},
 		Log: Log{Format: e.oneOf("PRAZO_LOG_FORMAT", "text", "text", "json")},
 	}
@@ -108,6 +115,7 @@ func load(getenv func(string) string) (Config, error) {
 		cfg.Storage.MasterKey = key
 	}
 	cfg.Moodle.BaseURL = strings.TrimRight(e.str("PRAZO_MOODLE_URL", baseURLOf(cfg.Moodle.ICalURL)), "/")
+	cfg.Moodle.AllowedHosts = strings.Split(e.str("PRAZO_MOODLE_HOSTS", DefaultMoodleHosts), ",")
 	if cfg.Moodle.ICalURL != "" && baseURLOf(cfg.Moodle.ICalURL) == "" {
 		e.fail("PRAZO_ICAL_URL", errors.New("precisa ser uma URL https://")) // sem ecoar: contém o authtoken
 	}
@@ -217,6 +225,19 @@ func (e *env) typeSet(key string) collections.Set[domain.DeadlineType] {
 		s.Add(t)
 	}
 	return s
+}
+
+func (e *env) int(key string, def int) int {
+	v := e.str(key, "")
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		e.fail(key, fmt.Errorf("use um número inteiro ≥ 0"))
+		return def
+	}
+	return n
 }
 
 func (e *env) duration(key string, def time.Duration) time.Duration {

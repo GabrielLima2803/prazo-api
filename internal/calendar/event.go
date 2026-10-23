@@ -3,7 +3,9 @@ package calendar
 import (
 	"crypto/sha256"
 	"encoding/base32"
+	"encoding/hex"
 	"hash/fnv"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -131,4 +133,35 @@ func description(d domain.Deadline) string {
 	}
 	parts = append(parts, "— sincronizado pelo Prazo")
 	return strings.Join(parts, "\n\n")
+}
+
+// Hash cobre tudo o que vai para o destino: se não mudou, não há o que
+// enviar. Inclui o estilo (cor, lembretes), que muda pelas preferências.
+func (e Event) Hash() string {
+	h := sha256.New()
+	write := func(v string) {
+		h.Write([]byte(v))
+		h.Write([]byte{0x1f})
+	}
+	write(e.ID)
+	write(e.Summary)
+	write(e.Description)
+	write(e.Link)
+	write(e.Start.UTC().Format(time.RFC3339))
+	write(e.End.UTC().Format(time.RFC3339))
+	write(e.TimeZone)
+	write(e.ColorID)
+	write(strconv.FormatBool(e.Busy))
+	for _, r := range e.Reminders {
+		write(r.String())
+	}
+	keys := make([]string, 0, len(e.Properties))
+	for k := range e.Properties {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		write(k + "=" + e.Properties[k])
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }

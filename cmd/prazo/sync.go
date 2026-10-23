@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
@@ -18,16 +17,24 @@ func runSync(ctx context.Context, a *app, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	svc := a.syncService(a.accounts())
-	if *dryRun {
-		return dryRunSync(ctx, a, svc, *days, *links)
+	if *dryRun && a.cfg.Storage.MasterKey == nil {
+		// Sem armazenamento: só a PRAZO_ICAL_URL, sem conta salva.
+		acc := account.NewService(nil, a.http, a.log, a.cfg.Moodle.ICalURL)
+		return dryRunSync(ctx, a, sync.NewService(acc.Source(), a.cfg.Normalize), *days, *links)
 	}
-
-	kv, err := a.secrets()
+	m, err := a.manager(ctx)
 	if err != nil {
 		return err
 	}
-	t, err := a.target(kv)(ctx)
+	tn, err := a.cliTenant(ctx, m)
+	if err != nil {
+		return err
+	}
+	svc := sync.NewService(tn.Accounts.Source(), a.cfg.Normalize, sync.WithLogger(a.log))
+	if *dryRun {
+		return dryRunSync(ctx, a, svc, *days, *links)
+	}
+	t, err := a.target(tn.KV)(ctx)
 	if err != nil {
 		return err
 	}
@@ -42,25 +49,14 @@ func runSync(ctx context.Context, a *app, args []string) error {
 	}
 	a.log.Info("sync concluído",
 		"buscados", r.Plan.Fetched, "prazos", len(r.Plan.Deadlines),
-		"criados", r.Created, "atualizados", r.Updated, "ocultos", r.Hidden, "falhas", r.Failed,
-		"duracao", time.Since(start).Round(time.Millisecond))
-	fmt.Fprintf(a.stdout, "%d prazo(s) na agenda %q: %d criado(s), %d atualizado(s), %d falha(s).\n",
-		len(r.Plan.Deadlines), a.cfg.Google.CalendarName, r.Created, r.Updated, r.Failed)
-	return nil
-}
-
-// accounts usa a conta do Moodle conectada pelo app (cifrada no
-// PRAZO_DATA_DIR) e cai para PRAZO_ICAL_URL quando não há nenhuma.
-func (a *app) accounts() *account.Service {
-	var kv store.KV
-	if s, err := a.secrets(); err == nil {
-		kv = s
+		"criados", r.Created, "atualizados", r.Updated, "iguais", r.Unchanged, "apagados", r.Deleted,
+		"ocultos", r.Hidden, "falhas", r.Failed, "duracao", time.Since(start).Round(time.Millisecond))
+	fmt.Fprintf(a.stdout, "%d prazo(s) na agenda %q: %d criado(s), %d atualizado(s), %d sem mudança, %d apagado(s), %d falha(s).\n",
+		len(r.Plan.Deadlines), a.cfg.Google.CalendarName, r.Created, r.Updated, r.Unchanged, r.Deleted, r.Failed)
+	if r.DeleteBlocked > 0 {
+		fmt.Fprintf(a.stdout, "Atenção: %d prazo(s) sumiram de uma vez do Moodle; nada foi apagado por segurança.\n", r.DeleteBlocked)
 	}
-	return account.NewService(kv, a.http, a.log, a.cfg.Moodle.ICalURL)
-}
-
-func (a *app) syncService(acc *account.Service) *sync.Service {
-	return sync.NewService(acc.Source(), a.cfg.Normalize)
+	return nil
 }
 
 func dryRunSync(ctx context.Context, a *app, svc *sync.Service, days int, links bool) error {

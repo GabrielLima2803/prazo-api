@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	gosync "sync"
 	"time"
+
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 const maxBody = 64 << 10
@@ -18,8 +21,8 @@ type server struct {
 	logins *limiter
 }
 
-// New devolve o handler com todas as rotas. /healthz é público; o resto
-// exige "Authorization: Bearer <PRAZO_API_TOKEN>".
+// New devolve o handler com todas as rotas. /healthz, o login e o callback do
+// Google são públicos; /api/v1 exige uma sessão do app ou o PRAZO_API_TOKEN.
 func New(d Deps) http.Handler {
 	if d.PlanMaxAge <= 0 {
 		d.PlanMaxAge = 5 * time.Minute
@@ -27,7 +30,7 @@ func New(d Deps) http.Handler {
 	if d.SyncTimeout <= 0 {
 		d.SyncTimeout = 3 * time.Minute
 	}
-	s := &server{Deps: d, logins: newLimiter(10, time.Minute)}
+	s := &server{Deps: d, logins: newLimiter(20, time.Minute)}
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/status", s.status)
@@ -38,9 +41,6 @@ func New(d Deps) http.Handler {
 	api.HandleFunc("PUT /api/v1/preferences", s.putPreferences)
 	api.HandleFunc("POST /api/v1/sync", s.sync)
 	api.HandleFunc("GET /api/v1/moodle", s.getMoodle)
-	api.HandleFunc("POST /api/v1/moodle/login", s.moodleLogin)
-	api.HandleFunc("POST /api/v1/moodle/ical", s.moodleICal)
-	api.HandleFunc("DELETE /api/v1/moodle", s.deleteMoodle)
 	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	api.HandleFunc("POST /api/v1/google/auth", s.googleAuth)
 	api.HandleFunc("DELETE /api/v1/google", s.deleteGoogle)
@@ -50,32 +50,49 @@ func New(d Deps) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 	mux.Handle("/api/", s.authenticate(api))
-	// Login do app: públicos, com limite de tentativas. Só o dono do
-	// servidor (account.Owner) consegue entrar.
 	mux.HandleFunc("POST /auth/login", s.login)
 	mux.HandleFunc("POST /auth/ical", s.loginICal)
-	// Público: quem chega aqui é o navegador vindo do Google; o state prova
-	// que a autorização começou pelo app autenticado.
+	// Quem chega aqui é o navegador vindo do Google; o state prova que a
+	// autorização começou pelo app autenticado.
 	mux.HandleFunc("GET /oauth/google/callback", s.googleCallback)
 	return s.logRequests(cors(mux))
 }
 
-// authenticate aceita a sessão do app ou o PRAZO_API_TOKEN (terminal e
-// administração).
+type ctxKey struct{}
+
+// tenantOf devolve o usuário da requisição, já autenticada.
+func tenantOf(r *http.Request) *tenant.Tenant { return r.Context().Value(ctxKey{}).(*tenant.Tenant) }
+
+// authenticate resolve o usuário pela sessão do app (ou o PRAZO_API_TOKEN,
+// que age como AdminTenant) e o põe no contexto da requisição.
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		admin := bearer && s.Token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.Token)) == 1
-		if !admin && (!bearer || s.Sessions == nil || !s.Sessions.Valid(r.Context(), token)) {
+		t, err := s.resolve(r.Context(), token, bearer)
+		if err != nil {
 			writeCodedError(w, http.StatusUnauthorized, "unauthorized", errors.New("sessão expirada; entre de novo"))
 			return
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, t)))
 	})
 }
 
-// limiter é uma janela fixa global: suficiente para um servidor de uma
-// pessoa, e o próprio Moodle bloqueia contas após várias senhas erradas.
+func (s *server) resolve(ctx context.Context, token string, bearer bool) (*tenant.Tenant, error) {
+	if !bearer || token == "" {
+		return nil, errors.New("sem token")
+	}
+	if s.Token != "" && s.AdminTenant != nil && subtle.ConstantTimeCompare([]byte(token), []byte(s.Token)) == 1 {
+		return s.AdminTenant(ctx)
+	}
+	userID, ok := s.Sessions.User(ctx, token)
+	if !ok {
+		return nil, errors.New("sessão desconhecida")
+	}
+	return s.Tenants.Get(ctx, userID)
+}
+
+// limiter é uma janela fixa global para as rotas de login; o próprio Moodle
+// também bloqueia contas após várias senhas erradas.
 type limiter struct {
 	mu     gosync.Mutex
 	max    int
@@ -106,7 +123,7 @@ func cors(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("Access-Control-Allow-Origin", "*")
 		h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		h.Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
+		h.Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -160,4 +177,14 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
+}
+
+// syncInBackground sincroniza fora da requisição: se o app fechar, a
+// sincronização termina mesmo assim.
+func (s *server) syncInBackground(t *tenant.Tenant) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), s.SyncTimeout)
+		defer cancel()
+		t.Runner.RunNow(ctx) // ErrBusy e falhas já são logados pelo Runner
+	}()
 }

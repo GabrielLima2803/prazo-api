@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -20,7 +19,7 @@ func (s *server) googleAuth(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	authURL, err := s.GoogleAuth.Start(req.ReturnTo)
+	authURL, err := s.GoogleAuth.Start(tenantOf(r).User.ID, req.ReturnTo)
 	if err != nil {
 		writeCodedError(w, http.StatusUnprocessableEntity, "invalid_return_to", err)
 		return
@@ -33,7 +32,7 @@ func (s *server) deleteGoogle(w http.ResponseWriter, r *http.Request) {
 		writeCodedError(w, http.StatusNotImplemented, "google_app_auth_unavailable", errGoogleAppAuthOff)
 		return
 	}
-	if err := s.GoogleAuth.Disconnect(r.Context()); err != nil {
+	if err := s.GoogleAuth.Disconnect(r.Context(), tenantOf(r).User.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -51,18 +50,16 @@ func (s *server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	case q.Get("error") != "":
 		page = callbackPage{Message: "A autorização foi cancelada no Google."}
 	default:
-		returnTo, err := s.GoogleAuth.Finish(r.Context(), q.Get("state"), q.Get("code"))
+		userID, returnTo, err := s.GoogleAuth.Finish(r.Context(), q.Get("state"), q.Get("code"))
 		page.ReturnTo = template.URL(returnTo) // validado no Start: só esquemas de app
 		if err != nil {
-			s.Log.Warn("autorização do Google falhou", "err", err)
+			s.Log.Warn("autorização do Google falhou", "user", userID, "err", err)
 			page.OK, page.Message = false, err.Error()
 		} else {
-			s.Log.Info("Google autorizado pelo app")
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), s.SyncTimeout)
-				defer cancel()
-				s.Runner.RunNow(ctx)
-			}()
+			s.Log.Info("Google autorizado pelo app", "user", userID)
+			if t, err := s.Tenants.Get(r.Context(), userID); err == nil {
+				s.syncInBackground(t)
+			}
 		}
 	}
 	if page.ReturnTo != "" {

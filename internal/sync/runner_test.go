@@ -86,11 +86,3 @@ func (s *switchableSource) Fetch(ctx context.Context) ([]domain.Deadline, error)
 	}
 	return s.fakeSource.Fetch(ctx)
 }
-
-func TestJitterBounds(t *testing.T) {
-	for range 200 {
-		if d := jitter(30 * time.Minute); d < 27*time.Minute || d > 33*time.Minute {
-			t.Fatalf("jitter = %v", d)
-		}
-	}
-}

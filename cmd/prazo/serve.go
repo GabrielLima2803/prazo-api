@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,13 +10,10 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/api"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
 	"github.com/GabrielLima2803/prazo-sync/internal/session"
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
-	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
-
-var errNoAPIToken = errors.New("defina PRAZO_API_TOKEN (gere um com \"prazo keygen\"); o app usa esse token para acessar a API")
 
 func runServe(ctx context.Context, a *app, args []string) error {
 	fs := newFlagSet("serve", "Sobe a API usada pelo app e sincroniza com o Google a cada intervalo.")
@@ -26,35 +22,39 @@ func runServe(ctx context.Context, a *app, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if a.cfg.Server.APIToken == "" {
-		return errNoAPIToken
+	m, err := a.manager(ctx)
+	if err != nil {
+		return err
 	}
 	kv, err := a.secrets()
 	if err != nil {
 		return err
 	}
-	accounts := account.NewService(kv, a.http, a.log, a.cfg.Moodle.ICalURL)
-	runner := sync.NewRunner(a.syncService(accounts), a.target(kv), a.log)
 	deps := api.Deps{
-		Runner:       runner,
-		Accounts:     accounts,
-		Sessions:     session.New(kv),
-		Prefs:        prefs.NewStore(kv),
-		Token:        a.cfg.Server.APIToken,
-		CalendarName: a.cfg.Google.CalendarName,
-		GoogleReady: func(ctx context.Context) bool {
+		Tenants:  m,
+		Auth:     account.NewAuthenticator(a.http, a.cfg.Moodle.AllowedHosts...),
+		Sessions: session.New(kv),
+		Token:    a.cfg.Server.APIToken,
+		AdminTenant: func(ctx context.Context) (*tenant.Tenant, error) {
+			return a.cliTenant(ctx, m)
+		},
+		GoogleReady: func(ctx context.Context, kv store.KV) bool {
 			_, err := google.LoadToken(ctx, kv)
 			return err == nil
 		},
-		Log: a.log,
+		CalendarName: a.cfg.Google.CalendarName,
+		Log:          a.log,
 	}
-	appAuth, err := a.appAuth(kv)
+	appAuth, err := a.appAuth(m)
 	if err != nil {
 		return err
 	}
 	if appAuth != nil {
 		deps.GoogleAuth = appAuth
 		fmt.Fprintf(a.stdout, "Autorização do Google pelo app ativa. URI de redirecionamento: %s\n", appAuth.RedirectURL())
+	}
+	if users, err := m.Users(ctx); err == nil {
+		a.log.Info("usuários cadastrados", "total", len(users), "limite", a.cfg.Server.MaxUsers)
 	}
 
 	srv := &http.Server{
@@ -75,7 +75,7 @@ func runServe(ctx context.Context, a *app, args []string) error {
 		fmt.Fprintf(a.stdout, "No app, use o servidor: %s\n", u)
 	}
 
-	go runner.Loop(ctx, *interval)
+	go m.Loop(ctx, *interval)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 
@@ -92,7 +92,7 @@ func runServe(ctx context.Context, a *app, args []string) error {
 
 // appAuth devolve nil sem erro quando a autorização pelo app não foi
 // configurada: o servidor funciona, só sem o botão "Conectar Google".
-func (a *app) appAuth(kv store.KV) (*google.AppAuth, error) {
+func (a *app) appAuth(m *tenant.Manager) (*google.AppAuth, error) {
 	if a.cfg.Server.PublicURL == "" || a.cfg.Google.WebCredentialsFile == "" {
 		return nil, nil
 	}
@@ -100,7 +100,7 @@ func (a *app) appAuth(kv store.KV) (*google.AppAuth, error) {
 	if err != nil {
 		return nil, err
 	}
-	return google.NewAppAuth(cfg, a.cfg.Server.PublicURL, kv), nil
+	return google.NewAppAuth(cfg, a.cfg.Server.PublicURL, m.Namespace), nil
 }
 
 // reachableURL devolve o endereço pelo qual o celular alcança o servidor na
