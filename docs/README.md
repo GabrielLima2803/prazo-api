@@ -17,7 +17,7 @@ Google:
 |---|---|---|
 | 0 | Descoberta (`prazo doctor`) | ✅ concluída |
 | 1 | Leitura e normalização (`prazo sync --dry-run`) | ✅ concluída |
-| 2 | Google Agenda (`prazo auth`, `prazo sync`) | 🔄 código pronto; falta o teste com a conta real |
+| 2 | Google Agenda (`prazo auth`, `prazo sync`) | ✅ concluída |
 | 3 | Estado (SQLite), diff e deletes seguros | pendente |
 | 4 | Serviço (`prazo serve`), healthcheck e Docker de produção | 🔄 `serve` com API e sync periódico; falta Docker de produção |
 | 5 | Web services e status de entrega (✅) | pendente |

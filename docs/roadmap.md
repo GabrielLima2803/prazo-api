@@ -44,9 +44,11 @@ disciplina reconhecidos.
 - `cmd/prazo` com registro de comandos e um `app` com as dependências
   compartilhadas.
 
-### Fase 2: Google Agenda 🔄
+### Fase 2: Google Agenda ✅
 
-Código pronto e testado com fakes; falta a primeira execução com a conta real.
+Validada com a conta real em 23/10/2026: 41 eventos criados na agenda
+"Prazo — UDESC" sem falhas; a segunda execução fez 0 criações e 41
+atualizações (idempotente).
 
 - `internal/crypto`: AES-256-GCM com versão, nonce aleatório e AAD.
 - `internal/store` + `filekv`: segredos em arquivos cifrados até o SQLite.

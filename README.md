@@ -4,8 +4,8 @@ Sincroniza prazos, entregas, provas e eventos do Moodle da UDESC com uma agenda
 dedicada no Google Agenda: título padronizado, cor por disciplina, lembretes por
 tipo, filtros e status de entrega.
 
-> Em construção. Fases 0 (descoberta) e 1 (leitura) concluídas; Fase 2
-> (Google Agenda) implementada. Detalhes em [docs/roadmap.md](docs/roadmap.md).
+> Em construção. Fases 0 a 2 concluídas (leitura do Moodle e sincronização
+> com o Google Agenda), com API e app móvel em andamento. Detalhes em [docs/roadmap.md](docs/roadmap.md).
 
 ```
 $ prazo sync --dry-run
