@@ -103,6 +103,8 @@ func connectError(err error) (int, string) {
 		return http.StatusForbidden, "too_many_users"
 	case errors.Is(err, webservice.ErrInvalidLogin):
 		return http.StatusUnprocessableEntity, "invalid_login"
+	case errors.Is(err, webservice.ErrAuthBackendDown):
+		return http.StatusServiceUnavailable, "moodle_auth_down"
 	case errors.Is(err, webservice.ErrServiceUnavailable):
 		return http.StatusUnprocessableEntity, "service_unavailable"
 	case errors.Is(err, account.ErrExportUnavailable):

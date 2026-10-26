@@ -98,3 +98,9 @@ func TestPublicConfigAndPendingEvents(t *testing.T) {
 		t.Fatalf("PendingEvents = %+v, %v", evs, err)
 	}
 }
+
+func TestLoginErrorAuthBackendDown(t *testing.T) {
+	if err := loginError("auth_ldap_noconnect_all", "LDAP - O módulo não conseguiu se conectar"); !errors.Is(err, ErrAuthBackendDown) {
+		t.Fatalf("err = %v", err)
+	}
+}
