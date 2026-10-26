@@ -170,21 +170,33 @@ func (m *Manager) Loop(ctx context.Context, interval time.Duration) {
 				return
 			}
 		}
-		wait := jitter(interval)
-		next := m.now().Add(wait).UTC()
+		next := m.now().Add(jitter(interval)).UTC()
 		for _, u := range users {
 			if t, err := m.Get(ctx, u.ID); err == nil {
 				t.Runner.SetNextRun(next)
 			}
 		}
-		timer := time.NewTimer(wait)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		if !sleepUntil(ctx, next, time.Minute) {
 			return
-		case <-timer.C:
 		}
 	}
+}
+
+// sleepUntil espera até o horário de parede deadline, conferindo a cada
+// check. Um timer simples usa o relógio monotônico, que para enquanto o
+// computador está suspenso: depois de acordar, a espera ainda duraria o
+// tempo que faltava. Devolve false se ctx for cancelado.
+func sleepUntil(ctx context.Context, deadline time.Time, check time.Duration) bool {
+	t := time.NewTicker(check)
+	defer t.Stop()
+	for time.Now().Round(0).Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-t.C:
+		}
+	}
+	return true
 }
 
 func jitter(d time.Duration) time.Duration {

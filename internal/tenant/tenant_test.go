@@ -90,3 +90,14 @@ func TestJitterBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestSleepUntil(t *testing.T) {
+	if !sleepUntil(context.Background(), time.Now().Add(30*time.Millisecond), 5*time.Millisecond) {
+		t.Fatal("deveria terminar quando o horário passa")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleepUntil(ctx, time.Now().Add(time.Hour), time.Millisecond) {
+		t.Fatal("deveria parar com o contexto cancelado")
+	}
+}
