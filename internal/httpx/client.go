@@ -11,8 +11,59 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/retry"
+	"github.com/GabrielLima2803/prazo-sync/internal/logging"
 )
+
+type Options struct {
+	Timeout     time.Duration // por tentativa
+	MaxRetries  int
+	BaseDelay   time.Duration
+	MaxDelay    time.Duration
+	MaxBody     int64
+	Concurrency int // padrão 1: não sobrecarregar o servidor da universidade
+	UserAgent   string
+	Transport   http.RoundTripper // nil = http.DefaultTransport
+}
+
+type Client struct {
+	http       *http.Client
+	maxRetries int
+	baseDelay  time.Duration
+	maxDelay   time.Duration
+	maxBody    int64
+	userAgent  string
+	sem        chan struct{}
+	sleep      func(context.Context, time.Duration) error
+}
+
+type requestFunc func(context.Context) (*http.Request, error)
+
+var (
+	ErrBodyTooLarge     = errors.New("resposta maior que o limite")
+	ErrInsecureRedirect = errors.New("redirecionamento para endereço sem HTTPS recusado")
+	ErrTooManyRedirects = errors.New("redirecionamentos demais")
+)
+
+// StatusError é uma resposta não-2xx.
+type StatusError struct {
+	Code       int
+	RetryAfter time.Duration
+}
+
+func (e *StatusError) Error() string { return fmt.Sprintf("http status %d", e.Code) }
+
+func (e *StatusError) Temporary() bool {
+	return e.Code == http.StatusTooManyRequests || e.Code == http.StatusRequestTimeout || e.Code >= 500
+}
+
+// sanitize remove segredos da URL que o net/http embute nas mensagens de erro.
+func sanitize(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		ue.URL = logging.RedactURL(ue.URL)
+	}
+	return err
+}
 
 func New(o Options) *Client {
 	if o.Timeout <= 0 {
@@ -41,7 +92,7 @@ func New(o Options) *Client {
 		maxBody:    o.MaxBody,
 		userAgent:  o.UserAgent,
 		sem:        make(chan struct{}, o.Concurrency),
-		sleep:      retry.Sleep,
+		sleep:      Sleep,
 	}
 }
 

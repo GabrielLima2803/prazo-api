@@ -3,6 +3,8 @@
 package config
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,7 +16,7 @@ import (
 	"time"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/collections"
-	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
+
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )
 
@@ -116,7 +118,7 @@ func load(getenv func(string) string) (Config, error) {
 		e.fail("PRAZO_SYNC_INTERVAL", errors.New("o mínimo é 1m, para não sobrecarregar o Moodle"))
 	}
 	if raw := e.str("PRAZO_MASTER_KEY", ""); raw != "" {
-		key, err := crypto.ParseKey(raw)
+		key, err := storage.ParseKey(raw)
 		if err != nil {
 			e.fail("PRAZO_MASTER_KEY", err) // sem ecoar o valor
 		}

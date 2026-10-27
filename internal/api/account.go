@@ -1,15 +1,15 @@
 package api
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
+
 	"context"
 	"errors"
 	"net/http"
 	"time"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
-	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 // deleteTimeout cobre esperar a sincronização em andamento terminar.
@@ -19,12 +19,12 @@ const deleteTimeout = 5 * time.Minute
 // Senhas nunca são guardadas; tokens e a URL do calendário ficam de fora
 // porque são credenciais, não informação sobre a pessoa.
 type accountExport struct {
-	ExportedAt  time.Time         `json:"exportedAt"`
-	User        tenant.User       `json:"user"`
-	Moodle      MoodleStatus      `json:"moodle"`
-	Google      Google            `json:"google"`
-	Preferences prefs.Preferences `json:"preferences"`
-	Note        string            `json:"note"`
+	ExportedAt  time.Time        `json:"exportedAt"`
+	User        tenant.User      `json:"user"`
+	Moodle      MoodleStatus     `json:"moodle"`
+	Google      Google           `json:"google"`
+	Preferences sync.Preferences `json:"preferences"`
+	Note        string           `json:"note"`
 }
 
 const exportNote = "Credenciais (token do Moodle, URL do calendário e token do Google) ficam cifradas no servidor e não são exportadas. " +
@@ -43,7 +43,7 @@ func (s *server) exportAccount(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		out.Moodle = toMoodleStatus(m, 0)
-	case !errors.Is(err, account.ErrNotConnected):
+	case !errors.Is(err, moodle.ErrNotConnected):
 		s.internalError(w, r, err)
 		return
 	}
@@ -67,7 +67,7 @@ func (s *server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 
 	if s.ForgetGoogle != nil {
 		err := s.ForgetGoogle(ctx, t.KV)
-		if errors.Is(err, google.ErrRevoke) {
+		if errors.Is(err, calendar.ErrRevoke) {
 			s.Log.Warn("revogar acesso do Google ao excluir a conta", "user", t.User.ID, "err", err)
 		} else if err != nil {
 			s.internalError(w, r, err)

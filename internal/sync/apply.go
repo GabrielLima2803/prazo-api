@@ -1,15 +1,16 @@
 package sync
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 // Sync calcula o plano e leva o destino a ele:
@@ -127,10 +128,10 @@ func planDeadline(p Plan, sourceID string) (d domain.Deadline) {
 	return d
 }
 
-func loadState(ctx context.Context, kv store.KV, calendarID string) (*state, error) {
+func loadState(ctx context.Context, kv storage.KV, calendarID string) (*state, error) {
 	st := &state{CalendarID: calendarID, Events: map[string]syncedEvent{}}
-	b, err := kv.Get(ctx, store.KeySyncState)
-	if errors.Is(err, store.ErrNotFound) {
+	b, err := kv.Get(ctx, storage.KeySyncState)
+	if errors.Is(err, storage.ErrNotFound) {
 		return st, nil
 	}
 	if err != nil {
@@ -147,17 +148,17 @@ func loadState(ctx context.Context, kv store.KV, calendarID string) (*state, err
 	return st, nil
 }
 
-func saveState(ctx context.Context, kv store.KV, st *state) error {
+func saveState(ctx context.Context, kv storage.KV, st *state) error {
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
-	return kv.Put(ctx, store.KeySyncState, b)
+	return kv.Put(ctx, storage.KeySyncState, b)
 }
 
 func ensureCalendar(ctx context.Context, t Target) (string, error) {
-	known, err := t.State.Get(ctx, store.KeyGoogleCalendar)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
+	known, err := t.State.Get(ctx, storage.KeyGoogleCalendar)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return "", err
 	}
 	id, err := t.Sink.EnsureCalendar(ctx, string(known), t.Calendar)
@@ -165,7 +166,7 @@ func ensureCalendar(ctx context.Context, t Target) (string, error) {
 		return "", err
 	}
 	if id != string(known) {
-		if err := t.State.Put(ctx, store.KeyGoogleCalendar, []byte(id)); err != nil {
+		if err := t.State.Put(ctx, storage.KeyGoogleCalendar, []byte(id)); err != nil {
 			return "", fmt.Errorf("guardar id da agenda %s: %w", id, err)
 		}
 	}

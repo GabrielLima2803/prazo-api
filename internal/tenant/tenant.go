@@ -1,10 +1,10 @@
-// Package tenant organiza os usuários do servidor: cada aluno tem um espaço
-// próprio no KV (conta do Moodle, token do Google, preferências, estado da
-// sincronização) e um Runner. O Manager registra usuários e sincroniza todos,
-// um de cada vez, para não sobrecarregar o Moodle nem o Google.
 package tenant
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,11 +18,6 @@ import (
 	"strings"
 	gosync "sync"
 	"time"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
-	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
 var (
@@ -48,18 +43,18 @@ func IDFor(host string, moodleUserID int64) string {
 // Tenant é um usuário com as dependências já montadas.
 type Tenant struct {
 	User     User
-	KV       store.KV
-	Accounts *account.Service
-	Prefs    *prefs.Store
+	KV       storage.KV
+	Accounts *moodle.AccountService
+	Prefs    *sync.PreferenceStore
 	Runner   *sync.Runner
 }
 
 // Builder monta as dependências de um usuário a partir do KV dele; fica no
 // cmd, que conhece Google, HTTP e configuração.
-type Builder func(u User, kv store.KV) *Tenant
+type Builder func(u User, kv storage.KV) *Tenant
 
 type Manager struct {
-	root     store.KV
+	root     storage.KV
 	build    Builder
 	log      *slog.Logger
 	maxUsers int
@@ -69,16 +64,16 @@ type Manager struct {
 	tenants map[string]*Tenant
 }
 
-func NewManager(root store.KV, build Builder, log *slog.Logger, maxUsers int) *Manager {
+func NewManager(root storage.KV, build Builder, log *slog.Logger, maxUsers int) *Manager {
 	return &Manager{root: root, build: build, log: log, maxUsers: maxUsers, now: time.Now, tenants: map[string]*Tenant{}}
 }
 
 // Namespace é o KV de um usuário.
-func (m *Manager) Namespace(id string) store.KV { return store.Namespace(m.root, "u"+id+"_") }
+func (m *Manager) Namespace(id string) storage.KV { return storage.Namespace(m.root, "u"+id+"_") }
 
 func (m *Manager) Users(ctx context.Context) ([]User, error) {
-	b, err := m.root.Get(ctx, store.KeyUsers)
-	if errors.Is(err, store.ErrNotFound) {
+	b, err := m.root.Get(ctx, storage.KeyUsers)
+	if errors.Is(err, storage.ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -144,7 +139,7 @@ func (m *Manager) Delete(ctx context.Context, id string) error {
 	}
 	kv := m.Namespace(id)
 	err = t.Runner.Close(func() error {
-		for _, key := range store.UserKeys {
+		for _, key := range storage.UserKeys {
 			if err := kv.Delete(ctx, key); err != nil {
 				return fmt.Errorf("apagar %s: %w", key, err)
 			}
@@ -184,7 +179,7 @@ func (m *Manager) saveUsers(ctx context.Context, users []User) error {
 	if err != nil {
 		return err
 	}
-	return m.root.Put(ctx, store.KeyUsers, b)
+	return m.root.Put(ctx, storage.KeyUsers, b)
 }
 
 // Loop sincroniza todos os usuários, um de cada vez, e espera interval (±10%)

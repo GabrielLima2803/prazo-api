@@ -1,14 +1,14 @@
 package doctor
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+
 	"cmp"
 	"regexp"
 	"slices"
 	"time"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/collections"
-	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 var digits = regexp.MustCompile(`\d+`)
 
 // AnalyzeICal resume o feed. Eventos em [now, now+window) entram em Upcoming.
-func AnalyzeICal(feed ical.Feed, now time.Time, window time.Duration) ICalReport {
+func AnalyzeICal(feed moodle.Feed, now time.Time, window time.Duration) ICalReport {
 	r := ICalReport{
 		Total:      len(feed.Events),
 		Invalid:    len(feed.Invalid),

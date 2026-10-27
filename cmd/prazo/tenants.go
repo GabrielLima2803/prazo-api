@@ -1,16 +1,15 @@
 package main
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
-	"github.com/GabrielLima2803/prazo-sync/internal/sync"
-	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 // manager abre o armazenamento e migra uma instalação antiga de um usuário só.
@@ -27,15 +26,15 @@ func (a *app) manager(ctx context.Context) (*tenant.Manager, error) {
 }
 
 // buildTenant monta as dependências de um usuário em cima do KV dele.
-func (a *app) buildTenant(u tenant.User, kv store.KV) *tenant.Tenant {
+func (a *app) buildTenant(u tenant.User, kv storage.KV) *tenant.Tenant {
 	log := a.log.With("user", u.ID)
-	accounts := account.NewService(kv, a.http, log, "")
+	accounts := moodle.NewAccountService(kv, a.http, log, "")
 	svc := sync.NewService(accounts.Source(), a.cfg.Normalize, sync.WithLogger(log))
 	return &tenant.Tenant{
 		User:     u,
 		KV:       kv,
 		Accounts: accounts,
-		Prefs:    prefs.NewStore(kv),
+		Prefs:    sync.NewPreferenceStore(kv),
 		Runner:   sync.NewRunner(svc, a.target(kv), log),
 	}
 }
@@ -44,18 +43,18 @@ func (a *app) buildTenant(u tenant.User, kv store.KV) *tenant.Tenant {
 // PRAZO_API_TOKEN: o da PRAZO_ICAL_URL ou, sem ela, o único cadastrado.
 func (a *app) cliTenant(ctx context.Context, m *tenant.Manager) (*tenant.Tenant, error) {
 	if env := a.cfg.Moodle.ICalURL; env != "" {
-		host, userID := account.IdentityFromICal(env)
+		host, userID := moodle.IdentityFromICal(env)
 		if userID == 0 {
-			return nil, account.ErrMissingUserID
+			return nil, moodle.ErrMissingUserID
 		}
 		t, err := m.Register(ctx, tenant.User{ID: tenant.IDFor(host, userID), Host: host, MoodleUserID: userID})
 		if err != nil {
 			return nil, err
 		}
-		if _, err := t.Accounts.Moodle(ctx); errors.Is(err, account.ErrNotConnected) {
-			acc := account.Moodle{Method: account.MethodICal, BaseURL: "https://" + host, ICalURL: env, UserID: userID}
+		if _, err := t.Accounts.Moodle(ctx); errors.Is(err, moodle.ErrNotConnected) {
+			acc := moodle.Account{Method: moodle.MethodICal, BaseURL: "https://" + host, ICalURL: env, UserID: userID}
 			b, _ := json.Marshal(acc)
-			if err := t.KV.Put(ctx, store.KeyMoodle, b); err != nil {
+			if err := t.KV.Put(ctx, storage.KeyMoodle, b); err != nil {
 				return nil, err
 			}
 		}

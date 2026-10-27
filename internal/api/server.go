@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
+
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -11,18 +13,20 @@ import (
 	"strings"
 	gosync "sync"
 	"time"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 const maxBody = 64 << 10
 
-// Limites de login: um teto global (protege o Moodle e o servidor) e um por
-// conta (impede tentar muitas senhas de uma mesma pessoa por aqui).
+// LoginAttemptsPerAccount é quantas vezes uma mesma conta do Moodle pode
+// tentar entrar por aqui a cada 15 minutos: impede testar muitas senhas de
+// uma pessoa através do servidor.
+const LoginAttemptsPerAccount = 5
+
+// Limites de login: além do limite por conta, um teto global protege o
+// Moodle e o servidor.
 const (
 	loginGlobalMax     = 20
 	loginGlobalWindow  = time.Minute
-	loginAccountMax    = 5
 	loginAccountWindow = 15 * time.Minute
 )
 
@@ -50,7 +54,7 @@ func New(d Deps) http.Handler {
 	s := &server{
 		Deps:          d,
 		logins:        newLimiter(loginGlobalMax, loginGlobalWindow),
-		accountLogins: newLimiter(loginAccountMax, loginAccountWindow),
+		accountLogins: newLimiter(LoginAttemptsPerAccount, loginAccountWindow),
 	}
 
 	api := http.NewServeMux()
@@ -224,7 +228,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func writeError(w http.ResponseWriter, code int, err error) {
-	writeJSON(w, code, errorBody{Error: err.Error()})
+	writeJSON(w, code, ErrorBody{Error: err.Error()})
 }
 
 // internalError registra o erro completo e responde uma mensagem genérica:
@@ -237,7 +241,7 @@ func (s *server) internalError(w http.ResponseWriter, r *http.Request, err error
 var errInternal = errors.New("erro interno no servidor do Prazo; tente de novo em instantes")
 
 func writeCodedError(w http.ResponseWriter, status int, code string, err error) {
-	writeJSON(w, status, errorBody{Error: err.Error(), Code: code})
+	writeJSON(w, status, ErrorBody{Error: err.Error(), Code: code})
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {

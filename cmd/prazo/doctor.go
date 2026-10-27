@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+
 	"bytes"
 	"context"
 	"errors"
@@ -13,8 +15,6 @@ import (
 
 	"github.com/GabrielLima2803/prazo-sync/internal/doctor"
 	"github.com/GabrielLima2803/prazo-sync/internal/logging"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
 )
 
 const doctorUsage = `Lê a URL do iCal de PRAZO_ICAL_URL. Nunca passe a URL como argumento: ela
@@ -47,7 +47,7 @@ func runDoctor(ctx context.Context, a *app, args []string) error {
 		return nil
 	}
 
-	ws := webservice.NewClient(a.cfg.Moodle.BaseURL, a.http)
+	ws := moodle.NewWebServiceClient(a.cfg.Moodle.BaseURL, a.http)
 	token := a.cfg.Moodle.Token
 	if token == "" && *user != "" {
 		if token, err = login(ctx, ws, *user, *pwStdin); err != nil {
@@ -58,20 +58,20 @@ func runDoctor(ctx context.Context, a *app, args []string) error {
 	return nil
 }
 
-func loadFeed(ctx context.Context, a *app, file string) (*ical.Feed, error) {
+func loadFeed(ctx context.Context, a *app, file string) (*moodle.Feed, error) {
 	if file != "" {
 		f, err := os.Open(file)
 		if err != nil {
 			return nil, err
 		}
 		defer f.Close()
-		feed, err := ical.Parse(f)
+		feed, err := moodle.ParseICal(f)
 		return &feed, err
 	}
 	if a.cfg.Moodle.ICalURL == "" {
 		return nil, nil
 	}
-	client, err := ical.NewClient(a.cfg.Moodle.ICalURL, a.http)
+	client, err := moodle.NewICalClient(a.cfg.Moodle.ICalURL, a.http)
 	if err != nil {
 		return nil, err
 	}
@@ -81,14 +81,14 @@ func loadFeed(ctx context.Context, a *app, file string) (*ical.Feed, error) {
 }
 
 func loginHint(err error) string {
-	if errors.Is(err, webservice.ErrServiceUnavailable) {
+	if errors.Is(err, moodle.ErrServiceUnavailable) {
 		return "    → a instância bloqueia o app; o Prazo vai usar só o iCal.\n"
 	}
 	return "    → contas que entram só pelo id.udesc/office365 (SSO) não funcionam aqui; veja docs/moodle-udesc.md.\n"
 }
 
 // login obtém um token temporário; a senha só existe em memória e é zerada após o uso.
-func login(ctx context.Context, ws *webservice.Client, user string, fromStdin bool) (string, error) {
+func login(ctx context.Context, ws *moodle.WebServiceClient, user string, fromStdin bool) (string, error) {
 	pw, err := readPassword(user, fromStdin)
 	if err != nil {
 		return "", err

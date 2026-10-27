@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/retry"
 )
 
 // backoff usa full jitter; um Retry-After do servidor tem precedência.
@@ -16,7 +14,7 @@ func (c *Client) backoff(attempt int, lastErr error) time.Duration {
 	if errors.As(lastErr, &se) && se.RetryAfter > 0 {
 		return min(se.RetryAfter, c.maxDelay)
 	}
-	return retry.Backoff(attempt, c.baseDelay, c.maxDelay)
+	return Backoff(attempt, c.baseDelay, c.maxDelay)
 }
 
 func retryable(err error) bool {

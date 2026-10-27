@@ -1,17 +1,17 @@
 package sync
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+
 	"context"
 	"errors"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/calendartest"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 type memKV map[string][]byte
@@ -19,7 +19,7 @@ type memKV map[string][]byte
 func (m memKV) Get(_ context.Context, k string) ([]byte, error) {
 	v, ok := m[k]
 	if !ok {
-		return nil, store.ErrNotFound
+		return nil, storage.ErrNotFound
 	}
 	return v, nil
 }
@@ -49,7 +49,7 @@ func TestSyncIsIdempotent(t *testing.T) {
 	if err != nil || r.Created != 3 || r.Updated != 0 {
 		t.Fatalf("primeira execução: %+v, %v", r, err)
 	}
-	if string(kv[store.KeyGoogleCalendar]) != r.CalendarID {
+	if string(kv[storage.KeyGoogleCalendar]) != r.CalendarID {
 		t.Fatal("id da agenda não foi guardado")
 	}
 
@@ -77,7 +77,7 @@ func TestSyncRecreatesDeletedCalendar(t *testing.T) {
 	if err != nil || r2.CalendarID == r.CalendarID || r2.Created != 3 {
 		t.Fatalf("após apagar a agenda: %+v, %v", r2, err)
 	}
-	if string(kv[store.KeyGoogleCalendar]) != r2.CalendarID {
+	if string(kv[storage.KeyGoogleCalendar]) != r2.CalendarID {
 		t.Fatal("novo id da agenda não foi guardado")
 	}
 }
@@ -116,7 +116,7 @@ func TestSyncSourceErrorWritesNothing(t *testing.T) {
 func TestSyncAppliesPreferences(t *testing.T) {
 	sink := calendartest.New()
 	tg := target(sink, memKV{})
-	tg.Prefs = prefs.Preferences{HiddenTypes: []domain.DeadlineType{domain.TypeExam}}
+	tg.Prefs = Preferences{HiddenTypes: []domain.DeadlineType{domain.TypeExam}}
 	r, err := NewService(threeDeadlines(), domain.NormalizeOptions{}).Sync(context.Background(), tg)
 	if err != nil || r.Created != 2 || r.Hidden != 1 {
 		t.Fatalf("report = %+v, err = %v", r, err)
@@ -161,7 +161,7 @@ func TestSyncDeletes(t *testing.T) {
 
 	// Ocultar pelas preferências apaga o que já estava lá.
 	tg := target(sink, kv)
-	tg.Prefs = prefs.Preferences{HiddenTypes: []domain.DeadlineType{domain.TypeAssign}}
+	tg.Prefs = Preferences{HiddenTypes: []domain.DeadlineType{domain.TypeAssign}}
 	r, _ = svc.Sync(ctx, tg)
 	if r.Deleted != 9 || r.Hidden != 9 || r.DeleteBlocked != 0 {
 		t.Fatalf("ocultar: %+v", r)

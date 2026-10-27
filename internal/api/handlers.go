@@ -1,6 +1,11 @@
 package api
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
+
 	"context"
 	"errors"
 	"fmt"
@@ -9,13 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
-	"github.com/GabrielLima2803/prazo-sync/internal/source"
-	"github.com/GabrielLima2803/prazo-sync/internal/sync"
-	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +48,7 @@ func (s *server) meta(w http.ResponseWriter, _ *http.Request) {
 // view junta o plano com as preferências, que o app e o sync compartilham.
 type view struct {
 	plan  sync.Plan
-	prefs prefs.Preferences
+	prefs sync.Preferences
 	style calendar.Style
 }
 
@@ -72,11 +71,11 @@ func (s *server) load(ctx context.Context, t *tenant.Tenant, refresh bool) (view
 // planError diferencia "Moodle não conectado" (o app mostra a tela de
 // conexão) de uma falha ao ler o Moodle.
 func planError(w http.ResponseWriter, err error) {
-	if errors.Is(err, account.ErrNotConnected) {
+	if errors.Is(err, moodle.ErrNotConnected) {
 		writeCodedError(w, http.StatusConflict, "moodle_not_connected", err)
 		return
 	}
-	if errors.Is(err, source.ErrUnauthorized) {
+	if errors.Is(err, moodle.ErrUnauthorized) {
 		writeCodedError(w, http.StatusConflict, "moodle_reauth", err)
 		return
 	}
@@ -141,13 +140,13 @@ func (s *server) getPreferences(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) putPreferences(w http.ResponseWriter, r *http.Request) {
-	var p prefs.Preferences
+	var p sync.Preferences
 	if !decode(w, r, &p) {
 		return
 	}
 	saved, err := tenantOf(r).Prefs.Save(r.Context(), p)
 	switch {
-	case errors.Is(err, prefs.ErrInvalid):
+	case errors.Is(err, sync.ErrInvalidPreferences):
 		writeError(w, http.StatusUnprocessableEntity, err)
 	case err != nil:
 		s.internalError(w, r, err)

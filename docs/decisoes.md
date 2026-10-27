@@ -259,3 +259,24 @@ Formato curto: contexto → decisão → consequência.
   (`/privacidade`), com o contato de `PRAZO_PRIVACY_CONTACT`.
 - **Consequência:** sem backups, a exclusão é imediata e definitiva. Uma
   chave nova por usuário precisa entrar em `store.UserKeys`.
+
+## D24. Pacotes por assunto e testes de integração em `tests/`
+
+- **Contexto:** eram 22 pacotes, vários com menos de 60 linhas (`retry`,
+  `source`, `store`), e cada um repetia `types.go` e `errors.go`. Navegar
+  exigia saltar entre muitos diretórios para seguir um único fluxo.
+- **Decisão:** um pacote por assunto, 12 no total:
+  `source` + `source/ical` + `source/webservice` + `account` → `moodle`;
+  `store` + `store/filekv` + `crypto` → `storage`;
+  `calendar/google` → `calendar`; `prefs` → `sync`; `session` → `tenant`;
+  `retry` → `httpx`. Os nomes que colidiam ganharam o contexto no nome
+  (`ICalClient`, `WebServiceClient`, `GoogleSink`, `FileKV`,
+  `PreferenceStore`, `Sessions`). Tipos e erros foram para o arquivo do
+  conceito. Testes unitários continuam ao lado do código (padrão do Go, que
+  permite testar o que não é exportado); os de integração da API foram para
+  `tests/`, com os fixtures em `tests/testdata/`, e os DTOs da API passaram a
+  ser exportados, por serem o contrato com o app.
+- **Consequência:** `calendar` agora importa as bibliotecas do Google (antes
+  isolado em `calendar/google`); o `sync` continua dependendo só da
+  interface `Sink`. As decisões anteriores citam os nomes antigos dos
+  pacotes; o mapa acima traduz.

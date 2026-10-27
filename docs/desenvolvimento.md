@@ -17,7 +17,7 @@ go run ./cmd/prazo doctor                       # diagnóstico do iCal + web ser
 go run ./cmd/prazo doctor -user SEU_USUARIO     # + funções liberadas e disciplinas (pede a senha)
 go run ./cmd/prazo sync --dry-run               # próximos 30 dias, normalizados
 go run ./cmd/prazo sync --dry-run -days 60 -links
-go run ./cmd/prazo doctor -ics testdata/moodle_cct_anon.ics -skip-ws   # offline
+go run ./cmd/prazo doctor -ics tests/testdata/moodle_cct_anon.ics -skip-ws   # offline
 go run ./cmd/prazo auth                         # autoriza o Google (uma vez)
 go run ./cmd/prazo sync                         # aplica na agenda
 PRAZO_HTTP_ADDR=0.0.0.0:8080 go run ./cmd/prazo serve   # API do app + sync periódico
@@ -99,10 +99,19 @@ código 2.
 ## Qualidade
 
 ```sh
+make check          # gofmt, go vet e todos os testes com -race
+make test-unit      # só os unitários (ao lado do código, em internal/ e cmd/)
+make test-integration   # só os de integração (tests/)
+```
+
+Sem `make`, os comandos equivalentes:
+
+```sh
 gofmt -l .
 go vet ./...
+go test -race ./internal/... ./cmd/...   # unitários
+go test -race ./tests/...                # integração
 staticcheck ./...
-go test -race ./...
 ```
 
 Todos passam limpos no estado atual. O `staticcheck` precisa ter sido
@@ -112,17 +121,17 @@ compilado com Go 1.26: `go run honnef.co/go/tools/cmd/staticcheck@2026.1 ./...`.
 
 | Camada | Como é testada |
 |---|---|
-| `domain`, `moodle`, `collections` | tabelas de casos; funções puras |
-| `source/ical` | fixtures `.ics` (sintética e real anonimizada) e `httptest.NewTLSServer` |
-| `source/webservice`, `doctor` | `httptest.Server` imitando as respostas do Moodle |
+| `domain`, `collections` | tabelas de casos; funções puras |
+| `moodle` | nomes de evento em tabela; iCal com fixtures `.ics` (sintética e real anonimizada); web services, login e conta com `httptest.NewTLSServer` imitando o Moodle |
+| `doctor` | `httptest.Server` imitando as respostas do Moodle |
 | `httpx` | servidor que falha N vezes, limite de corpo, vazamento de token, Retry-After |
-| `sync` | fake de `source.Source`, `calendartest.Fake`, KV em memória e relógio injetado |
-| `calendar` | regras puras: id válido para o Google, cor estável, janela, lembretes |
-| `calendar/google` | `httptest.Server` imitando a Calendar API (409, 404, 403 de cota, 429) e o endpoint de token (PKCE, state, escopo) |
-| `crypto`, `store/filekv` | ida e volta, adulteração, chave errada, permissão 0600, segredo nunca em texto plano |
+| `sync` | fake de `moodle.Source`, `calendartest.Fake`, KV em memória e relógio injetado |
+| `calendar` | regras puras: id válido para o Google, cor estável, janela, lembretes; `httptest.Server` imitando a Calendar API (409, 404, 403 de cota, 429) e o endpoint de token (PKCE, state, escopo) |
+| `storage` | ida e volta, adulteração, chave errada, permissão 0600, segredo nunca em texto plano |
 | `config` | `getenv` injetado (sem `os.Setenv`) |
-| `prefs` | normalização, validação, JSON sem `null`, estilo derivado |
-| `api` | `httptest.Server` com fakes: token, prazos e disciplinas, preferências fluindo até o sync, erros 400/422 |
+| `sync` (preferências) | normalização, validação, JSON sem `null`, estilo derivado |
+| `tests/` (integração) | a API inteira num `httptest.Server`, com um Moodle falso por HTTPS: login, isolamento entre usuários, prazos, preferências fluindo até o sync, Google pelo app, exclusão e exportação da conta, limites de login, cabeçalhos e CORS |
+| `tenant` | usuários, migração da instalação antiga, sessões (limite por usuário, revogação, validade) |
 | `sync.Runner` | execuções concorrentes (`ErrBusy`), último resultado, cache do plano com a fonte fora |
 | `cmd/prazo` | formatação da tabela e roteamento de comandos |
 
@@ -149,8 +158,11 @@ Testes dentro do build: `docker build --target test .`
 ## Convenções de código
 
 - **Sem frameworks nem ORM.** Stdlib sempre que basta.
-- **Tipos e erros por pacote** em `types.go` e `errors.go`.
-- **Construtores** (`NewClient`, `NewSource`, `NewService`) validam a entrada e
+- **Pacotes por assunto**, arquivos nomeados pelo conceito; tipos e erros
+  junto do código que os usa (sem `types.go`/`errors.go` genéricos).
+- **Testes unitários ao lado do código**, no mesmo pacote; testes de
+  integração em `tests/`, só com a API pública.
+- **Construtores** (`NewICalClient`, `NewAccountService`, `NewFileKV`) validam a entrada e
   escondem os campos internos.
 - **Interfaces** só com mais de uma implementação real ou para um fake de teste.
 - **Erros** com contexto (`%w`). Sentinelas para o chamador decidir, tipos
