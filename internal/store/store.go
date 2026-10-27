@@ -31,6 +31,10 @@ const (
 	KeyUsers    = "users"
 )
 
+// UserKeys são todas as chaves do espaço de um usuário. Excluir a conta
+// apaga cada uma delas; uma chave nova por usuário precisa entrar aqui.
+var UserKeys = []string{KeyGoogleToken, KeyGoogleCalendar, KeyPreferences, KeyMoodle, KeySyncState, KeyPendingSeen}
+
 // Namespace isola as chaves de um usuário dentro do mesmo KV.
 func Namespace(kv KV, prefix string) KV { return namespaced{kv: kv, prefix: prefix} }
 

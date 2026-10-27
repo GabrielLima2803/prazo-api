@@ -10,7 +10,10 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/source"
 )
 
-var ErrBusy = errors.New("já existe uma sincronização em andamento")
+var (
+	ErrBusy   = errors.New("já existe uma sincronização em andamento")
+	ErrClosed = errors.New("conta excluída; a sincronização foi desligada")
+)
 
 // TargetFunc monta o destino a cada execução. Assim um "prazo auth" feito com
 // o servidor no ar passa a valer sem reiniciar.
@@ -33,6 +36,7 @@ type Runner struct {
 	now    func() time.Time
 
 	running gosync.Mutex
+	closed  bool // protegido por running
 
 	mu      gosync.RWMutex
 	last    *Run
@@ -51,6 +55,9 @@ func (r *Runner) RunNow(ctx context.Context) (Run, error) {
 		return Run{}, ErrBusy
 	}
 	defer r.running.Unlock()
+	if r.closed {
+		return Run{}, ErrClosed
+	}
 
 	run := Run{StartedAt: r.now().UTC()}
 	t, err := r.target(ctx)
@@ -75,6 +82,17 @@ func (r *Runner) RunNow(ctx context.Context) (Run, error) {
 		r.log.Info("sync concluído", attrs...)
 	}
 	return run, err
+}
+
+// Close espera a sincronização em andamento terminar, roda fn com o Runner
+// travado e o desliga para sempre: nenhuma execução posterior grava nada.
+// Usado ao excluir a conta, para que uma sincronização atrasada não recrie
+// os dados apagados.
+func (r *Runner) Close(fn func() error) error {
+	r.running.Lock()
+	defer r.running.Unlock()
+	r.closed = true
+	return fn()
 }
 
 // Invalidate descarta o plano em cache, por exemplo depois de trocar a conta
