@@ -36,9 +36,10 @@ var appScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://`)
 // no celular: o Google devolve o código para PRAZO_PUBLIC_URL (HTTPS), e não
 // para 127.0.0.1.
 type AppAuth struct {
-	cfg   *oauth2.Config
-	kvFor func(userID string) store.KV
-	now   func() time.Time
+	cfg     *oauth2.Config
+	kvFor   func(userID string) store.KV
+	revoker *Revoker
+	now     func() time.Time
 
 	mu      gosync.Mutex
 	pending map[string]pendingAuth
@@ -57,7 +58,7 @@ type pendingAuth struct {
 func NewAppAuth(cfg *oauth2.Config, publicURL string, kvFor func(userID string) store.KV) *AppAuth {
 	c := *cfg
 	c.RedirectURL = strings.TrimRight(publicURL, "/") + CallbackPath
-	return &AppAuth{cfg: &c, kvFor: kvFor, now: time.Now, pending: map[string]pendingAuth{}}
+	return &AppAuth{cfg: &c, kvFor: kvFor, revoker: NewRevoker(nil), now: time.Now, pending: map[string]pendingAuth{}}
 }
 
 func (a *AppAuth) RedirectURL() string { return a.cfg.RedirectURL }
@@ -108,8 +109,10 @@ func (a *AppAuth) Finish(ctx context.Context, state, code string) (userID, retur
 	return p.userID, p.returnTo, SaveToken(ctx, a.kvFor(p.userID), ClientWeb, tok)
 }
 
+// Disconnect revoga o acesso no Google e apaga o token guardado. Pode
+// devolver ErrRevoke: o token local já foi apagado, só o Google não confirmou.
 func (a *AppAuth) Disconnect(ctx context.Context, userID string) error {
-	return a.kvFor(userID).Delete(ctx, store.KeyGoogleToken)
+	return a.revoker.Forget(ctx, a.kvFor(userID))
 }
 
 func validReturnTo(s string) bool {
