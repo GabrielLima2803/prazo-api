@@ -1,18 +1,18 @@
 package main
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
+
 	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/api"
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
-	"github.com/GabrielLima2803/prazo-sync/internal/session"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
-	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 func runServe(ctx context.Context, a *app, args []string) error {
@@ -32,17 +32,17 @@ func runServe(ctx context.Context, a *app, args []string) error {
 	}
 	deps := api.Deps{
 		Tenants:  m,
-		Auth:     account.NewAuthenticator(a.http, a.cfg.Moodle.AllowedHosts...),
-		Sessions: session.New(kv),
+		Auth:     moodle.NewAuthenticator(a.http, a.cfg.Moodle.AllowedHosts...),
+		Sessions: tenant.NewSessions(kv),
 		Token:    a.cfg.Server.APIToken,
 		AdminTenant: func(ctx context.Context) (*tenant.Tenant, error) {
 			return a.cliTenant(ctx, m)
 		},
-		GoogleReady: func(ctx context.Context, kv store.KV) bool {
-			_, err := google.LoadToken(ctx, kv)
+		GoogleReady: func(ctx context.Context, kv storage.KV) bool {
+			_, err := calendar.LoadToken(ctx, kv)
 			return err == nil
 		},
-		ForgetGoogle: google.NewRevoker(nil).Forget,
+		ForgetGoogle: calendar.NewRevoker(nil).Forget,
 		CORSOrigins:  a.cfg.Server.CORSOrigins,
 		Privacy:      api.Privacy{Operator: a.cfg.Server.PrivacyOperator, Contact: a.cfg.Server.PrivacyContact},
 		CalendarName: a.cfg.Google.CalendarName,
@@ -98,7 +98,7 @@ func runServe(ctx context.Context, a *app, args []string) error {
 
 // appAuth devolve nil sem erro quando a autorização pelo app não foi
 // configurada: o servidor funciona, só sem o botão "Conectar Google".
-func (a *app) appAuth(m *tenant.Manager) (*google.AppAuth, error) {
+func (a *app) appAuth(m *tenant.Manager) (*calendar.AppAuth, error) {
 	if a.cfg.Server.PublicURL == "" || a.cfg.Google.WebCredentialsFile == "" {
 		return nil, nil
 	}
@@ -106,7 +106,7 @@ func (a *app) appAuth(m *tenant.Manager) (*google.AppAuth, error) {
 	if err != nil {
 		return nil, err
 	}
-	return google.NewAppAuth(cfg, a.cfg.Server.PublicURL, m.Namespace), nil
+	return calendar.NewAppAuth(cfg, a.cfg.Server.PublicURL, m.Namespace), nil
 }
 
 // reachableURL devolve o endereço pelo qual o celular alcança o servidor na

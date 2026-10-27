@@ -1,17 +1,16 @@
 package doctor
 
 import (
-	"context"
-
 	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
+
+	"context"
 )
 
 const pendingLimit = 50
 
 // InspectWebService roda as verificações em sequência; uma falha não impede
 // as seguintes, exceto quando a próxima depende do resultado anterior.
-func InspectWebService(ctx context.Context, ws *webservice.Client, opts WebServiceOptions) WebServiceReport {
+func InspectWebService(ctx context.Context, ws *moodle.WebServiceClient, opts WebServiceOptions) WebServiceReport {
 	r := WebServiceReport{BaseURL: ws.BaseURL()}
 	r.PublicConfig = run(ws.PublicConfig(ctx))
 	if opts.ProbeLogin {
@@ -26,7 +25,7 @@ func InspectWebService(ctx context.Context, ws *webservice.Client, opts WebServi
 		return r
 	}
 	available := r.Site.Value.FunctionSet()
-	for _, fn := range webservice.RequiredFunctions {
+	for _, fn := range moodle.RequiredFunctions {
 		r.Functions = append(r.Functions, FunctionStatus{Name: fn, Available: available.Has(fn)})
 	}
 

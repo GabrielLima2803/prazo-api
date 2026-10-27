@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+
 	"context"
 	"errors"
 	"io"
@@ -8,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/calendartest"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 )

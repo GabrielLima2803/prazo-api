@@ -1,14 +1,14 @@
 package main
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+
 	"context"
 	"fmt"
 	"time"
 
 	"golang.org/x/oauth2"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
-	"github.com/GabrielLima2803/prazo-sync/internal/crypto"
 )
 
 func runAuth(ctx context.Context, a *app, args []string) error {
@@ -36,13 +36,13 @@ func runAuth(ctx context.Context, a *app, args []string) error {
 	defer cancel()
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, googleHTTP)
 
-	tok, err := google.Authorize(ctx, cfg, *addr, func(authURL string) {
+	tok, err := calendar.Authorize(ctx, cfg, *addr, func(authURL string) {
 		fmt.Fprintf(a.stdout, "Abra este endereço no navegador e autorize o acesso:\n\n  %s\n\nAguardando a resposta do Google...\n", authURL)
 	})
 	if err != nil {
 		return err
 	}
-	if err := google.SaveToken(ctx, tn.KV, google.ClientInstalled, tok); err != nil {
+	if err := calendar.SaveToken(ctx, tn.KV, calendar.ClientInstalled, tok); err != nil {
 		return fmt.Errorf("guardar token: %w", err)
 	}
 	fmt.Fprintf(a.stdout, "\nAutorizado. Token guardado (cifrado) em %s.\nPróximo passo: prazo sync\n", a.cfg.Storage.DataDir)
@@ -55,6 +55,6 @@ func runKeygen(_ context.Context, a *app, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	fmt.Fprintln(a.stdout, crypto.GenerateKey())
+	fmt.Fprintln(a.stdout, storage.GenerateKey())
 	return nil
 }

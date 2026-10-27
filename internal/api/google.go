@@ -1,13 +1,13 @@
 package api
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+
 	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
 )
 
 var errGoogleAppAuthOff = errors.New("o servidor não está configurado para autorizar o Google pelo app")
@@ -17,7 +17,7 @@ func (s *server) googleAuth(w http.ResponseWriter, r *http.Request) {
 		writeCodedError(w, http.StatusNotImplemented, "google_app_auth_unavailable", errGoogleAppAuthOff)
 		return
 	}
-	var req googleAuthRequest
+	var req GoogleAuthRequest
 	if !decode(w, r, &req) {
 		return
 	}
@@ -26,7 +26,7 @@ func (s *server) googleAuth(w http.ResponseWriter, r *http.Request) {
 		writeCodedError(w, http.StatusUnprocessableEntity, "invalid_return_to", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, googleAuthResponse{AuthURL: authURL})
+	writeJSON(w, http.StatusOK, GoogleAuthResponse{AuthURL: authURL})
 }
 
 func (s *server) deleteGoogle(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +36,7 @@ func (s *server) deleteGoogle(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.GoogleAuth.Disconnect(r.Context(), tenantOf(r).User.ID)
 	switch {
-	case errors.Is(err, google.ErrRevoke):
+	case errors.Is(err, calendar.ErrRevoke):
 		// O token já saiu daqui; só o Google não confirmou.
 		s.Log.Warn("revogar acesso do Google", "user", tenantOf(r).User.ID, "err", err)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "revoked": false})
@@ -93,11 +93,11 @@ const pageCSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsa
 // detalhes da resposta do Google.
 func callbackMessage(err error) string {
 	switch {
-	case errors.Is(err, google.ErrUnknownState):
+	case errors.Is(err, calendar.ErrUnknownState):
 		return "A autorização expirou. Comece de novo pelo app."
-	case errors.Is(err, google.ErrScopeDenied):
+	case errors.Is(err, calendar.ErrScopeDenied):
 		return "Marque a permissão de acesso às agendas e tente de novo pelo app."
-	case errors.Is(err, google.ErrNoRefreshToken):
+	case errors.Is(err, calendar.ErrNoRefreshToken):
 		return "O Google não liberou o acesso contínuo. Remova o Prazo em myaccount.google.com/permissions e tente de novo pelo app."
 	}
 	return "Não foi possível concluir a autorização. Tente de novo pelo app."

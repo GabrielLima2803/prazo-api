@@ -15,14 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 	"github.com/GabrielLima2803/prazo-sync/internal/calendar/calendartest"
 	"github.com/GabrielLima2803/prazo-sync/internal/domain"
 	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
-	"github.com/GabrielLima2803/prazo-sync/internal/prefs"
-	"github.com/GabrielLima2803/prazo-sync/internal/session"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
 	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
@@ -44,7 +42,7 @@ func (k *memKV) Get(_ context.Context, key string) ([]byte, error) {
 	if v, ok := k.m[key]; ok {
 		return v, nil
 	}
-	return nil, store.ErrNotFound
+	return nil, storage.ErrNotFound
 }
 
 func (k *memKV) Put(_ context.Context, key string, v []byte) error {
@@ -113,9 +111,9 @@ func newHarness(t *testing.T) *harness {
 	client := httpx.New(httpx.Options{Transport: h.moodle.Client().Transport})
 	host := strings.TrimPrefix(h.moodle.URL, "https://")
 
-	manager := tenant.NewManager(h.root, func(u tenant.User, kv store.KV) *tenant.Tenant {
-		accounts := account.NewService(kv, client, discard, "")
-		ps := prefs.NewStore(kv)
+	manager := tenant.NewManager(h.root, func(u tenant.User, kv storage.KV) *tenant.Tenant {
+		accounts := moodle.NewAccountService(kv, client, discard, "")
+		ps := sync.NewPreferenceStore(kv)
 		sink := calendartest.New()
 		h.sinks[u.ID] = sink
 		runner := sync.NewRunner(sync.NewService(accounts.Source(), domain.NormalizeOptions{}), func(ctx context.Context) (sync.Target, error) {
@@ -127,17 +125,17 @@ func newHarness(t *testing.T) *harness {
 
 	h.srv = httptest.NewServer(New(Deps{
 		Tenants:  manager,
-		Auth:     account.NewAuthenticator(client, host),
-		Sessions: session.New(h.root),
+		Auth:     moodle.NewAuthenticator(client, host),
+		Sessions: tenant.NewSessions(h.root),
 		Token:    adminToken,
 		AdminTenant: func(ctx context.Context) (*tenant.Tenant, error) {
 			return manager.Register(ctx, tenant.User{ID: "admin"})
 		},
-		GoogleReady: func(context.Context, store.KV) bool { return false },
+		GoogleReady: func(context.Context, storage.KV) bool { return false },
 		GoogleAuth:  h.google,
-		ForgetGoogle: func(ctx context.Context, kv store.KV) error {
+		ForgetGoogle: func(ctx context.Context, kv storage.KV) error {
 			h.forgotten++
-			return kv.Delete(ctx, store.KeyGoogleToken)
+			return kv.Delete(ctx, storage.KeyGoogleToken)
 		},
 		CORSOrigins:  []string{"http://localhost:8081"},
 		Privacy:      Privacy{Operator: "Fulano", Contact: "privacidade@example.com"},
@@ -165,15 +163,36 @@ func (h *harness) call(t *testing.T, token, method, path, body string, out any) 
 	return resp.StatusCode
 }
 
-func (h *harness) login(t *testing.T, user string) loginResponse {
+func (h *harness) login(t *testing.T, user string) LoginResponse {
 	t.Helper()
-	var lr loginResponse
+	var lr LoginResponse
 	body := fmt.Sprintf(`{"baseUrl":%q,"username":%q,"password":"certa"}`, h.moodle.URL, user)
 	if code := h.call(t, "", http.MethodPost, "/auth/login", body, &lr); code != http.StatusOK || lr.Token == "" {
 		t.Fatalf("login %s: %d %+v", user, code, lr)
 	}
 	return lr
 }
+
+type fakeGoogleAuth struct {
+	startedBy string
+}
+
+func (f *fakeGoogleAuth) Start(userID, returnTo string) (string, error) {
+	if strings.HasPrefix(returnTo, "http") {
+		return "", errors.New("returnTo inválido")
+	}
+	f.startedBy = userID
+	return "https://accounts.google.com/o/oauth2/auth?state=s1", nil
+}
+
+func (f *fakeGoogleAuth) Finish(_ context.Context, state, code string) (string, string, error) {
+	if state != "s1" || code != "c1" {
+		return "", "", errors.New("autorização expirada")
+	}
+	return f.startedBy, "exp://192.168.0.14:8081/--/google", nil
+}
+
+func (f *fakeGoogleAuth) Disconnect(context.Context, string) error { return nil }
 
 func TestAuth(t *testing.T) {
 	h := newHarness(t)
@@ -207,7 +226,7 @@ func TestUsersAreIsolated(t *testing.T) {
 	}
 
 	h.call(t, ana.Token, http.MethodPut, "/api/v1/preferences", `{"hiddenCourses":["POO"]}`, nil)
-	var pa, pb prefs.Preferences
+	var pa, pb sync.Preferences
 	h.call(t, ana.Token, http.MethodGet, "/api/v1/preferences", "", &pa)
 	h.call(t, bia.Token, http.MethodGet, "/api/v1/preferences", "", &pb)
 	if len(pa.HiddenCourses) != 1 || len(pb.HiddenCourses) != 0 {
@@ -247,7 +266,7 @@ func TestUsersAreIsolated(t *testing.T) {
 
 func TestLoginErrors(t *testing.T) {
 	h := newHarness(t)
-	var e errorBody
+	var e ErrorBody
 	if code := h.call(t, "", http.MethodPost, "/auth/login", fmt.Sprintf(`{"baseUrl":%q,"username":"ana","password":"errada"}`, h.moodle.URL), &e); code != http.StatusUnprocessableEntity || e.Code != "invalid_login" {
 		t.Errorf("senha errada: %d %+v", code, e)
 	}
@@ -264,7 +283,7 @@ func TestLoginErrors(t *testing.T) {
 
 func TestDeadlinesWithoutMoodle(t *testing.T) {
 	h := newHarness(t)
-	var e errorBody
+	var e ErrorBody
 	if code := h.call(t, adminToken, http.MethodGet, "/api/v1/deadlines", "", &e); code != http.StatusConflict || e.Code != "moodle_not_connected" {
 		t.Fatalf("deadlines sem Moodle: %d %+v", code, e)
 	}
@@ -289,31 +308,10 @@ func TestMeta(t *testing.T) {
 	}
 }
 
-type fakeGoogleAuth struct {
-	startedBy string
-}
-
-func (f *fakeGoogleAuth) Start(userID, returnTo string) (string, error) {
-	if strings.HasPrefix(returnTo, "http") {
-		return "", errors.New("returnTo inválido")
-	}
-	f.startedBy = userID
-	return "https://accounts.google.com/o/oauth2/auth?state=s1", nil
-}
-
-func (f *fakeGoogleAuth) Finish(_ context.Context, state, code string) (string, string, error) {
-	if state != "s1" || code != "c1" {
-		return "", "", errors.New("autorização expirada")
-	}
-	return f.startedBy, "exp://192.168.0.14:8081/--/google", nil
-}
-
-func (f *fakeGoogleAuth) Disconnect(context.Context, string) error { return nil }
-
 func TestGoogleAppAuth(t *testing.T) {
 	h := newHarness(t)
 	ana := h.login(t, "ana")
-	var auth googleAuthResponse
+	var auth GoogleAuthResponse
 	if code := h.call(t, ana.Token, http.MethodPost, "/api/v1/google/auth", `{"returnTo":"exp://192.168.0.14:8081/--/google"}`, &auth); code != http.StatusOK || auth.AuthURL == "" {
 		t.Fatalf("start: %d %+v", code, auth)
 	}

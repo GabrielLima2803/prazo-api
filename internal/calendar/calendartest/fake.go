@@ -2,13 +2,13 @@
 package calendartest
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
+
 	"context"
 	"fmt"
 	"maps"
 	"slices"
 	"sync"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/calendar"
 )
 
 type Fake struct {

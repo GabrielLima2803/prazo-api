@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
 	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
@@ -20,7 +20,7 @@ func TestDeleteAccount(t *testing.T) {
 	if code := h.call(t, ana.Token, http.MethodPut, "/api/v1/preferences", `{"hiddenCourses":["POO"]}`, nil); code != http.StatusOK {
 		t.Fatalf("preferências: %d", code)
 	}
-	h.root.Put(t.Context(), "u"+anaID+"_"+store.KeyGoogleToken, []byte("x"))
+	h.root.Put(t.Context(), "u"+anaID+"_"+storage.KeyGoogleToken, []byte("x"))
 
 	if code := h.call(t, ana.Token, http.MethodDelete, "/api/v1/account", "", nil); code != http.StatusOK {
 		t.Fatalf("excluir: %d", code)
@@ -38,7 +38,7 @@ func TestDeleteAccount(t *testing.T) {
 			t.Errorf("sobrou %s", key)
 		}
 	}
-	users := string(h.root.m[store.KeyUsers])
+	users := string(h.root.m[storage.KeyUsers])
 	h.root.mu.Unlock()
 	if strings.Contains(users, anaID) {
 		t.Error("a usuária continua na lista")
@@ -76,7 +76,7 @@ func TestExportHasNoSecrets(t *testing.T) {
 func TestLoginLimitPerAccount(t *testing.T) {
 	h := newHarness(t)
 	wrong := `{"baseUrl":"` + h.moodle.URL + `","username":"ana","password":"errada"}`
-	for i := range loginAccountMax {
+	for i := range LoginAttemptsPerAccount {
 		if code := h.call(t, "", http.MethodPost, "/auth/login", wrong, nil); code != http.StatusUnprocessableEntity {
 			t.Fatalf("tentativa %d: %d", i+1, code)
 		}
@@ -144,8 +144,8 @@ func TestInternalErrorsAreGeneric(t *testing.T) {
 	ana := h.login(t, "ana")
 	host := strings.TrimPrefix(h.moodle.URL, "https://")
 	// Preferências corrompidas no disco viram 500 sem detalhes.
-	h.root.Put(t.Context(), "u"+tenant.IDFor(host, 42)+"_"+store.KeyPreferences, []byte("{corrompido"))
-	var body errorBody
+	h.root.Put(t.Context(), "u"+tenant.IDFor(host, 42)+"_"+storage.KeyPreferences, []byte("{corrompido"))
+	var body ErrorBody
 	if code := h.call(t, ana.Token, http.MethodGet, "/api/v1/preferences", "", &body); code != http.StatusInternalServerError {
 		t.Fatalf("status %d", code)
 	}

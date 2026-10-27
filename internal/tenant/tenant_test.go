@@ -1,14 +1,14 @@
 package tenant
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+
 	"context"
 	"errors"
 	"io"
 	"log/slog"
 	"testing"
 	"time"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 type memKV map[string][]byte
@@ -17,7 +17,7 @@ func (m memKV) Get(_ context.Context, k string) ([]byte, error) {
 	if v, ok := m[k]; ok {
 		return v, nil
 	}
-	return nil, store.ErrNotFound
+	return nil, storage.ErrNotFound
 }
 func (m memKV) Put(_ context.Context, k string, v []byte) error { m[k] = v; return nil }
 func (m memKV) Delete(_ context.Context, k string) error        { delete(m, k); return nil }
@@ -25,7 +25,7 @@ func (m memKV) Delete(_ context.Context, k string) error        { delete(m, k); 
 var discard = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 func newManager(root memKV, max int) *Manager {
-	return NewManager(root, func(u User, kv store.KV) *Tenant { return &Tenant{User: u, KV: kv} }, discard, max)
+	return NewManager(root, func(u User, kv storage.KV) *Tenant { return &Tenant{User: u, KV: kv} }, discard, max)
 }
 
 func TestRegisterAndLimit(t *testing.T) {
@@ -54,11 +54,11 @@ func TestRegisterAndLimit(t *testing.T) {
 func TestMigrateLegacy(t *testing.T) {
 	ctx := context.Background()
 	root := memKV{
-		store.KeyGoogleToken:    []byte("token"),
-		store.KeyGoogleCalendar: []byte("cal@group"),
-		store.KeyPreferences:    []byte(`{}`),
-		store.KeySessions:       []byte(`[]`),
-		"owner":                 []byte(`{}`),
+		storage.KeyGoogleToken:    []byte("token"),
+		storage.KeyGoogleCalendar: []byte("cal@group"),
+		storage.KeyPreferences:    []byte(`{}`),
+		storage.KeySessions:       []byte(`[]`),
+		"owner":                   []byte(`{}`),
 	}
 	m := newManager(root, 0)
 	env := "https://moodle.joinville.udesc.br/calendar/export_execute.php?userid=12345&authtoken=x"
@@ -67,13 +67,13 @@ func TestMigrateLegacy(t *testing.T) {
 		t.Fatalf("migração = %+v, %v, %v", u, ok, err)
 	}
 	ns := m.Namespace(u.ID)
-	if b, _ := ns.Get(ctx, store.KeyGoogleCalendar); string(b) != "cal@group" {
+	if b, _ := ns.Get(ctx, storage.KeyGoogleCalendar); string(b) != "cal@group" {
 		t.Fatal("o id da agenda não foi para o espaço do usuário")
 	}
-	if _, err := ns.Get(ctx, store.KeyMoodle); err != nil {
+	if _, err := ns.Get(ctx, storage.KeyMoodle); err != nil {
 		t.Fatal("a conta do Moodle deveria ter sido criada a partir da PRAZO_ICAL_URL")
 	}
-	for _, k := range []string{store.KeyGoogleToken, store.KeySessions, "owner"} {
+	for _, k := range []string{storage.KeyGoogleToken, storage.KeySessions, "owner"} {
 		if _, ok := root[k]; ok {
 			t.Errorf("%s continuou no espaço global", k)
 		}

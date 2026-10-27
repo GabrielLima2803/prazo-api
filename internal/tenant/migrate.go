@@ -1,18 +1,18 @@
 package tenant
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+
 	"context"
 	"encoding/json"
 	"errors"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
 
 // Chaves da instalação de um usuário só, antes dos namespaces.
 var legacyKeys = []string{
-	store.KeyGoogleToken, store.KeyGoogleCalendar, store.KeyPreferences,
-	store.KeyMoodle, store.KeySyncState, store.KeyPendingSeen,
+	storage.KeyGoogleToken, storage.KeyGoogleCalendar, storage.KeyPreferences,
+	storage.KeyMoodle, storage.KeySyncState, storage.KeyPendingSeen,
 }
 
 // MigrateLegacy leva a instalação de um usuário só para o espaço dele: sem
@@ -25,11 +25,11 @@ func (m *Manager) MigrateLegacy(ctx context.Context, envICal string) (User, bool
 		return User{}, false, err
 	}
 
-	var acc account.Moodle
+	var acc moodle.Account
 	hasAccount := false
-	if b, err := m.root.Get(ctx, store.KeyMoodle); err == nil {
+	if b, err := m.root.Get(ctx, storage.KeyMoodle); err == nil {
 		hasAccount = json.Unmarshal(b, &acc) == nil && acc.UserID != 0
-	} else if !errors.Is(err, store.ErrNotFound) {
+	} else if !errors.Is(err, storage.ErrNotFound) {
 		return User{}, false, err
 	}
 
@@ -38,7 +38,7 @@ func (m *Manager) MigrateLegacy(ctx context.Context, envICal string) (User, bool
 	case hasAccount:
 		u.Host, u.MoodleUserID = acc.Host(), acc.UserID
 	case envICal != "":
-		u.Host, u.MoodleUserID = account.IdentityFromICal(envICal)
+		u.Host, u.MoodleUserID = moodle.IdentityFromICal(envICal)
 	}
 	if u.MoodleUserID == 0 {
 		return User{}, false, nil
@@ -48,7 +48,7 @@ func (m *Manager) MigrateLegacy(ctx context.Context, envICal string) (User, bool
 	ns := m.Namespace(u.ID)
 	for _, key := range legacyKeys {
 		b, err := m.root.Get(ctx, key)
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			continue
 		}
 		if err != nil {
@@ -59,9 +59,9 @@ func (m *Manager) MigrateLegacy(ctx context.Context, envICal string) (User, bool
 		}
 	}
 	if !hasAccount {
-		c := account.Moodle{Method: account.MethodICal, BaseURL: "https://" + u.Host, ICalURL: envICal, UserID: u.MoodleUserID}
+		c := moodle.Account{Method: moodle.MethodICal, BaseURL: "https://" + u.Host, ICalURL: envICal, UserID: u.MoodleUserID}
 		b, _ := json.Marshal(c)
-		if err := ns.Put(ctx, store.KeyMoodle, b); err != nil {
+		if err := ns.Put(ctx, storage.KeyMoodle, b); err != nil {
 			return User{}, false, err
 		}
 	}
@@ -69,7 +69,7 @@ func (m *Manager) MigrateLegacy(ctx context.Context, envICal string) (User, bool
 		return User{}, false, err
 	}
 	// Sessões antigas não sabem de qual usuário são: o app pede login de novo.
-	for _, key := range append(legacyKeys, "owner", store.KeySessions) {
+	for _, key := range append(legacyKeys, "owner", storage.KeySessions) {
 		if err := m.root.Delete(ctx, key); err != nil {
 			return User{}, false, err
 		}

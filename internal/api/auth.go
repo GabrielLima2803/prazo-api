@@ -1,15 +1,13 @@
 package api
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
+
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
-	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 var (
@@ -29,7 +27,7 @@ func (s *server) allowLogin(w http.ResponseWriter, account string) bool {
 // login recebe a senha só para trocar por um token do Moodle; ela não é
 // logada nem guardada.
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
-	var req moodleLogin
+	var req MoodleLogin
 	if !decode(w, r, &req) {
 		return
 	}
@@ -41,11 +39,11 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) loginICal(w http.ResponseWriter, r *http.Request) {
-	var req moodleICal
+	var req MoodleICal
 	if !decode(w, r, &req) {
 		return
 	}
-	host, userID := account.IdentityFromICal(req.ICalURL)
+	host, userID := moodle.IdentityFromICal(req.ICalURL)
 	if !s.allowLogin(w, fmt.Sprintf("ical|%s|%d", host, userID)) {
 		return
 	}
@@ -56,7 +54,7 @@ func (s *server) loginICal(w http.ResponseWriter, r *http.Request) {
 // enter cria (ou reencontra) o usuário pela identidade no Moodle, guarda a
 // conta no espaço dele, emite a sessão do app e já dispara a primeira
 // sincronização.
-func (s *server) enter(w http.ResponseWriter, r *http.Request, m account.Moodle, err error) {
+func (s *server) enter(w http.ResponseWriter, r *http.Request, m moodle.Account, err error) {
 	if err != nil {
 		s.connectFailed(w, r, err)
 		return
@@ -80,7 +78,7 @@ func (s *server) enter(w http.ResponseWriter, r *http.Request, m account.Moodle,
 	t.Runner.Invalidate()
 	s.syncInBackground(t)
 	saved, _ := t.Accounts.Moodle(r.Context())
-	writeJSON(w, http.StatusOK, loginResponse{Token: token, Moodle: toMoodleStatus(saved, events)})
+	writeJSON(w, http.StatusOK, LoginResponse{Token: token, Moodle: toMoodleStatus(saved, events)})
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +93,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 func (s *server) getMoodle(w http.ResponseWriter, r *http.Request) {
 	m, err := tenantOf(r).Accounts.Moodle(r.Context())
 	switch {
-	case errors.Is(err, account.ErrNotConnected):
+	case errors.Is(err, moodle.ErrNotConnected):
 		writeJSON(w, http.StatusOK, MoodleStatus{})
 	case err != nil:
 		s.internalError(w, r, err)
@@ -119,29 +117,29 @@ const codeMoodleUnreachable = "moodle_unreachable"
 
 func connectError(err error) (int, string) {
 	switch {
-	case errors.Is(err, account.ErrHostNotAllowed):
+	case errors.Is(err, moodle.ErrHostNotAllowed):
 		return http.StatusForbidden, "host_not_allowed"
 	case errors.Is(err, tenant.ErrTooManyUsers):
 		return http.StatusForbidden, "too_many_users"
-	case errors.Is(err, webservice.ErrInvalidLogin):
+	case errors.Is(err, moodle.ErrInvalidLogin):
 		return http.StatusUnprocessableEntity, "invalid_login"
-	case errors.Is(err, webservice.ErrAuthBackendDown):
+	case errors.Is(err, moodle.ErrAuthBackendDown):
 		return http.StatusServiceUnavailable, "moodle_auth_down"
-	case errors.Is(err, webservice.ErrServiceUnavailable):
+	case errors.Is(err, moodle.ErrServiceUnavailable):
 		return http.StatusUnprocessableEntity, "service_unavailable"
-	case errors.Is(err, account.ErrExportUnavailable):
+	case errors.Is(err, moodle.ErrExportUnavailable):
 		return http.StatusUnprocessableEntity, "export_unavailable"
-	case errors.Is(err, account.ErrInvalidBaseURL), errors.Is(err, ical.ErrInvalidURL), errors.Is(err, account.ErrMissingUserID):
+	case errors.Is(err, moodle.ErrInvalidBaseURL), errors.Is(err, moodle.ErrInvalidURL), errors.Is(err, moodle.ErrMissingUserID):
 		return http.StatusUnprocessableEntity, "invalid_url"
-	case errors.Is(err, ical.ErrAuthRejected), errors.Is(err, ical.ErrNotICalendar):
+	case errors.Is(err, moodle.ErrAuthRejected), errors.Is(err, moodle.ErrNotICalendar):
 		return http.StatusUnprocessableEntity, "not_icalendar"
-	case errors.Is(err, account.ErrEmptyFeed):
+	case errors.Is(err, moodle.ErrEmptyFeed):
 		return http.StatusUnprocessableEntity, "empty_feed"
 	}
 	return http.StatusBadGateway, codeMoodleUnreachable
 }
 
-func toMoodleStatus(m account.Moodle, events int) MoodleStatus {
+func toMoodleStatus(m moodle.Account, events int) MoodleStatus {
 	st := MoodleStatus{Connected: true, Method: m.Method, BaseURL: m.BaseURL, FullName: m.FullName, SiteName: m.SiteName, Events: events, NeedsReauth: m.NeedsReauth}
 	if !m.ConnectedAt.IsZero() {
 		at := m.ConnectedAt

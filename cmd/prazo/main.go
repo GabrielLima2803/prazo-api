@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
+
 	"context"
 	"errors"
 	"flag"
@@ -13,7 +15,7 @@ import (
 	_ "time/tzdata" // binário independente do tzdata do sistema (imagem distroless)
 
 	"github.com/GabrielLima2803/prazo-sync/internal/config"
-	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
+
 	"github.com/GabrielLima2803/prazo-sync/internal/logging"
 )
 

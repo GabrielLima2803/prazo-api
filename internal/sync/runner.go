@@ -1,13 +1,13 @@
 package sync
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+
 	"context"
 	"errors"
 	"log/slog"
 	gosync "sync"
 	"time"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/source"
 )
 
 var (
@@ -136,7 +136,7 @@ func (r *Runner) Plan(ctx context.Context, maxAge time.Duration) (Plan, error) {
 		return *cached, nil
 	}
 	p, err := r.svc.Plan(ctx)
-	if errors.Is(err, source.ErrUnauthorized) {
+	if errors.Is(err, moodle.ErrUnauthorized) {
 		// Mostrar o plano antigo esconderia que nada mais está sincronizando.
 		r.Invalidate()
 		return Plan{}, err

@@ -1,12 +1,12 @@
 package main
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+	"github.com/GabrielLima2803/prazo-sync/internal/sync"
+
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/account"
-	"github.com/GabrielLima2803/prazo-sync/internal/sync"
 )
 
 func runSync(ctx context.Context, a *app, args []string) error {
@@ -19,7 +19,7 @@ func runSync(ctx context.Context, a *app, args []string) error {
 	}
 	if *dryRun && a.cfg.Storage.MasterKey == nil {
 		// Sem armazenamento: só a PRAZO_ICAL_URL, sem conta salva.
-		acc := account.NewService(nil, a.http, a.log, a.cfg.Moodle.ICalURL)
+		acc := moodle.NewAccountService(nil, a.http, a.log, a.cfg.Moodle.ICalURL)
 		return dryRunSync(ctx, a, sync.NewService(acc.Source(), a.cfg.Normalize), *days, *links)
 	}
 	m, err := a.manager(ctx)

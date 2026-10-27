@@ -1,6 +1,9 @@
 package doctor
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
+	"github.com/GabrielLima2803/prazo-sync/internal/moodle"
+
 	"bytes"
 	"context"
 	"net/http"
@@ -10,20 +13,16 @@ import (
 	"testing"
 	"time"
 	_ "time/tzdata"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/httpx"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/ical"
-	"github.com/GabrielLima2803/prazo-sync/internal/source/webservice"
 )
 
-func loadFeed(t *testing.T, path string) ical.Feed {
+func loadFeed(t *testing.T, path string) moodle.Feed {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	feed, err := ical.Parse(f)
+	feed, err := moodle.ParseICal(f)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +90,7 @@ func TestInspectWebService(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ws := webservice.NewClient(srv.URL, httpx.New(httpx.Options{}))
+	ws := moodle.NewWebServiceClient(srv.URL, httpx.New(httpx.Options{}))
 	r := InspectWebService(context.Background(), ws, WebServiceOptions{Token: "TKN", Now: time.Now()})
 
 	if r.PublicConfig.Err != nil || r.Site.Err != nil {
