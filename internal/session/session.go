@@ -22,6 +22,10 @@ import (
 // antiga sai primeiro.
 const MaxSessions = 10
 
+// MaxAge é a validade de uma sessão: depois disso o app pede login de novo.
+// Limita o estrago de um aparelho perdido e evita guardar sessões esquecidas.
+const MaxAge = 180 * 24 * time.Hour
+
 type Session struct {
 	Hash      string    `json:"hash"`
 	UserID    string    `json:"userId"`
@@ -43,6 +47,8 @@ func (s *Service) Issue(ctx context.Context, userID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	now := s.now()
+	list = slices.DeleteFunc(list, func(x Session) bool { return s.expired(x, now) })
 	token := rand.Text() + rand.Text()
 	list = append(list, Session{Hash: hash(token), UserID: userID, CreatedAt: s.now().UTC()})
 	// Mantém as MaxSessions mais recentes do usuário (a lista está em ordem).
@@ -68,8 +74,9 @@ func (s *Service) User(ctx context.Context, token string) (string, bool) {
 		return "", false
 	}
 	h := []byte(hash(token))
+	now := s.now()
 	for _, sess := range list {
-		if sess.UserID != "" && subtle.ConstantTimeCompare([]byte(sess.Hash), h) == 1 {
+		if sess.UserID != "" && !s.expired(sess, now) && subtle.ConstantTimeCompare([]byte(sess.Hash), h) == 1 {
 			return sess.UserID, true
 		}
 	}
@@ -116,6 +123,10 @@ func (s *Service) save(ctx context.Context, list []Session) error {
 		return err
 	}
 	return s.kv.Put(ctx, store.KeySessions, b)
+}
+
+func (s *Service) expired(x Session, now time.Time) bool {
+	return now.Sub(x.CreatedAt) > MaxAge
 }
 
 func hash(token string) string {
