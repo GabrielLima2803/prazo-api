@@ -42,8 +42,14 @@ func runServe(ctx context.Context, a *app, args []string) error {
 			_, err := google.LoadToken(ctx, kv)
 			return err == nil
 		},
+		ForgetGoogle: google.NewRevoker(nil).Forget,
+		CORSOrigins:  a.cfg.Server.CORSOrigins,
+		Privacy:      api.Privacy{Operator: a.cfg.Server.PrivacyOperator, Contact: a.cfg.Server.PrivacyContact},
 		CalendarName: a.cfg.Google.CalendarName,
 		Log:          a.log,
+	}
+	if a.cfg.Server.PrivacyContact == "" {
+		a.log.Warn("defina PRAZO_PRIVACY_CONTACT: a LGPD exige um contato para pedidos dos usuários (página /privacidade)")
 	}
 	appAuth, err := a.appAuth(m)
 	if err != nil {

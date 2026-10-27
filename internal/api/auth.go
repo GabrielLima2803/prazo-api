@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,17 +12,28 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
-var errTooManyAttempts = errors.New("muitas tentativas; espere um minuto")
+var (
+	errTooManyAttempts = errors.New("muitas tentativas; espere um minuto")
+	errMoodleDown      = errors.New("não foi possível falar com o Moodle agora; tente de novo em instantes")
+)
+
+// allowLogin aplica o limite global e o da conta (Moodle + usuário).
+func (s *server) allowLogin(w http.ResponseWriter, account string) bool {
+	if s.logins.allow("") && s.accountLogins.allow(strings.ToLower(account)) {
+		return true
+	}
+	writeCodedError(w, http.StatusTooManyRequests, "too_many_attempts", errTooManyAttempts)
+	return false
+}
 
 // login recebe a senha só para trocar por um token do Moodle; ela não é
 // logada nem guardada.
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
-	if !s.logins.allow() {
-		writeCodedError(w, http.StatusTooManyRequests, "too_many_attempts", errTooManyAttempts)
-		return
-	}
 	var req moodleLogin
 	if !decode(w, r, &req) {
+		return
+	}
+	if !s.allowLogin(w, req.BaseURL+"|"+strings.TrimSpace(req.Username)) {
 		return
 	}
 	m, err := s.Auth.Login(r.Context(), req.BaseURL, req.Username, req.Password)
@@ -29,12 +41,12 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) loginICal(w http.ResponseWriter, r *http.Request) {
-	if !s.logins.allow() {
-		writeCodedError(w, http.StatusTooManyRequests, "too_many_attempts", errTooManyAttempts)
-		return
-	}
 	var req moodleICal
 	if !decode(w, r, &req) {
+		return
+	}
+	host, userID := account.IdentityFromICal(req.ICalURL)
+	if !s.allowLogin(w, fmt.Sprintf("ical|%s|%d", host, userID)) {
 		return
 	}
 	m, err := s.Auth.FromICal(req.ICalURL)
@@ -46,26 +58,23 @@ func (s *server) loginICal(w http.ResponseWriter, r *http.Request) {
 // sincronização.
 func (s *server) enter(w http.ResponseWriter, r *http.Request, m account.Moodle, err error) {
 	if err != nil {
-		status, code := connectError(err)
-		writeCodedError(w, status, code, err)
+		s.connectFailed(w, r, err)
 		return
 	}
 	u := tenant.User{ID: tenant.IDFor(m.Host(), m.UserID), Host: m.Host(), MoodleUserID: m.UserID, Name: m.FullName}
 	t, err := s.Tenants.Register(r.Context(), u)
 	if err != nil {
-		status, code := connectError(err)
-		writeCodedError(w, status, code, err)
+		s.connectFailed(w, r, err)
 		return
 	}
 	events, err := t.Accounts.Save(r.Context(), m)
 	if err != nil {
-		status, code := connectError(err)
-		writeCodedError(w, status, code, err)
+		s.connectFailed(w, r, err)
 		return
 	}
 	token, err := s.Sessions.Issue(r.Context(), u.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		s.internalError(w, r, err)
 		return
 	}
 	t.Runner.Invalidate()
@@ -77,7 +86,7 @@ func (s *server) enter(w http.ResponseWriter, r *http.Request, m account.Moodle,
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if err := s.Sessions.Revoke(r.Context(), token); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		s.internalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -89,11 +98,24 @@ func (s *server) getMoodle(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, account.ErrNotConnected):
 		writeJSON(w, http.StatusOK, MoodleStatus{})
 	case err != nil:
-		writeError(w, http.StatusInternalServerError, err)
+		s.internalError(w, r, err)
 	default:
 		writeJSON(w, http.StatusOK, toMoodleStatus(m, 0))
 	}
 }
+
+// connectFailed responde os erros conhecidos com a mensagem deles; o resto
+// (rede, disco) é registrado e respondido de forma genérica.
+func (s *server) connectFailed(w http.ResponseWriter, r *http.Request, err error) {
+	status, code := connectError(err)
+	if code == codeMoodleUnreachable {
+		s.Log.Warn("login falhou", "path", r.URL.Path, "err", err)
+		err = errMoodleDown
+	}
+	writeCodedError(w, status, code, err)
+}
+
+const codeMoodleUnreachable = "moodle_unreachable"
 
 func connectError(err error) (int, string) {
 	switch {
@@ -116,7 +138,7 @@ func connectError(err error) (int, string) {
 	case errors.Is(err, account.ErrEmptyFeed):
 		return http.StatusUnprocessableEntity, "empty_feed"
 	}
-	return http.StatusBadGateway, "moodle_unreachable"
+	return http.StatusBadGateway, codeMoodleUnreachable
 }
 
 func toMoodleStatus(m account.Moodle, events int) MoodleStatus {

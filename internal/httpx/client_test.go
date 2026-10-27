@@ -3,6 +3,7 @@ package httpx
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,5 +90,21 @@ func TestBackoffIsBounded(t *testing.T) {
 		if d := c.backoff(attempt, nil); d <= 0 || d > 5*time.Second {
 			t.Fatalf("tentativa %d: backoff fora do intervalo: %v", attempt, d)
 		}
+	}
+}
+
+func TestRedirectToHTTPIsRefused(t *testing.T) {
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "interno")
+	}))
+	defer plain.Close()
+	tlsSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plain.URL, http.StatusFound)
+	}))
+	defer tlsSrv.Close()
+
+	c := New(Options{Transport: tlsSrv.Client().Transport, MaxRetries: 2, BaseDelay: time.Millisecond})
+	if _, err := c.Get(context.Background(), tlsSrv.URL); !errors.Is(err, ErrInsecureRedirect) {
+		t.Fatalf("err = %v, quero ErrInsecureRedirect", err)
 	}
 }

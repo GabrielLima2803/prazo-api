@@ -34,7 +34,7 @@ func New(o Options) *Client {
 		o.UserAgent = "github.com/GabrielLima2803/prazo-sync/0.1"
 	}
 	return &Client{
-		http:       &http.Client{Timeout: o.Timeout, Transport: o.Transport},
+		http:       &http.Client{Timeout: o.Timeout, Transport: o.Transport, CheckRedirect: checkRedirect},
 		maxRetries: max(o.MaxRetries, 0),
 		baseDelay:  o.BaseDelay,
 		maxDelay:   o.MaxDelay,
@@ -43,6 +43,22 @@ func New(o Options) *Client {
 		sem:        make(chan struct{}, o.Concurrency),
 		sleep:      retry.Sleep,
 	}
+}
+
+// maxRedirects segue o padrão do net/http.
+const maxRedirects = 10
+
+// checkRedirect só segue redirecionamentos para HTTPS: um Moodle (ou quem se
+// passe por ele) não consegue levar o servidor a um endereço http interno,
+// nem fazer as credenciais trafegarem sem TLS.
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return ErrTooManyRedirects
+	}
+	if req.URL.Scheme != "https" {
+		return ErrInsecureRedirect
+	}
+	return nil
 }
 
 func (c *Client) Get(ctx context.Context, rawURL string) ([]byte, error) {

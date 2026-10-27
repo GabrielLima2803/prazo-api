@@ -24,7 +24,8 @@ func retryable(err error) bool {
 	if errors.As(err, &se) {
 		return se.Temporary()
 	}
-	return !errors.Is(err, context.Canceled) && !errors.Is(err, ErrBodyTooLarge)
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, ErrBodyTooLarge) &&
+		!errors.Is(err, ErrInsecureRedirect) && !errors.Is(err, ErrTooManyRedirects)
 }
 
 func parseRetryAfter(v string) time.Duration {

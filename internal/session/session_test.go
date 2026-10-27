@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/GabrielLima2803/prazo-sync/internal/store"
 )
@@ -61,5 +62,28 @@ func TestLimitIsPerUser(t *testing.T) {
 	s.RevokeUser(ctx, "ana")
 	if _, ok := s.User(ctx, bia); !ok {
 		t.Fatal("RevokeUser afetou outro usuário")
+	}
+}
+
+func TestSessionsExpire(t *testing.T) {
+	kv := memKV{}
+	s := New(kv)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	token, err := s.Issue(context.Background(), "ana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(MaxAge + time.Hour)
+	if _, ok := s.User(context.Background(), token); ok {
+		t.Fatal("sessão vencida ainda vale")
+	}
+	// A próxima emissão descarta as vencidas.
+	if _, err := s.Issue(context.Background(), "bia"); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.load(context.Background())
+	if len(list) != 1 {
+		t.Errorf("sessões guardadas: %d", len(list))
 	}
 }

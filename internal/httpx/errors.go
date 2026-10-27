@@ -10,7 +10,11 @@ import (
 	"github.com/GabrielLima2803/prazo-sync/internal/logging"
 )
 
-var ErrBodyTooLarge = errors.New("resposta maior que o limite")
+var (
+	ErrBodyTooLarge     = errors.New("resposta maior que o limite")
+	ErrInsecureRedirect = errors.New("redirecionamento para endereço sem HTTPS recusado")
+	ErrTooManyRedirects = errors.New("redirecionamentos demais")
+)
 
 // StatusError é uma resposta não-2xx.
 type StatusError struct {

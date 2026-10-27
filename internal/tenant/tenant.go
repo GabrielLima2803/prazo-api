@@ -134,6 +134,41 @@ func (m *Manager) Get(ctx context.Context, id string) (*Tenant, error) {
 	return m.tenantLocked(users[i]), nil
 }
 
+// Delete apaga tudo o que o servidor guarda do usuário: as chaves do espaço
+// dele e a entrada na lista de usuários. Espera a sincronização em andamento
+// terminar e desliga o Runner, para que nada seja recriado depois.
+func (m *Manager) Delete(ctx context.Context, id string) error {
+	t, err := m.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	kv := m.Namespace(id)
+	err = t.Runner.Close(func() error {
+		for _, key := range store.UserKeys {
+			if err := kv.Delete(ctx, key); err != nil {
+				return fmt.Errorf("apagar %s: %w", key, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	users, err := m.Users(ctx)
+	if err != nil {
+		return err
+	}
+	delete(m.tenants, id)
+	if err := m.saveUsers(ctx, slices.DeleteFunc(users, func(x User) bool { return x.ID == id })); err != nil {
+		return err
+	}
+	m.log.Info("usuário excluído", "user", id)
+	return nil
+}
+
 func (m *Manager) tenantLocked(u User) *Tenant {
 	if t, ok := m.tenants[u.ID]; ok {
 		t.User = u

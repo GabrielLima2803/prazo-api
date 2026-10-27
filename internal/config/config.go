@@ -66,6 +66,11 @@ type Server struct {
 	APIToken     string // segredo; exigido pelo "prazo serve"
 	SyncInterval time.Duration
 	MaxUsers     int // 0 = sem limite
+	// CORSOrigins: origens liberadas para o app no navegador (só desenvolvimento).
+	CORSOrigins []string
+	// Controlador dos dados, mostrado na página /privacidade (LGPD).
+	PrivacyOperator string
+	PrivacyContact  string
 }
 
 type Log struct {
@@ -90,11 +95,14 @@ func load(getenv func(string) string) (Config, error) {
 		},
 		Storage: Storage{DataDir: e.str("PRAZO_DATA_DIR", DefaultDataDir)},
 		Server: Server{
-			Addr:         e.str("PRAZO_HTTP_ADDR", DefaultHTTPAddr),
-			PublicURL:    strings.TrimRight(e.str("PRAZO_PUBLIC_URL", ""), "/"),
-			APIToken:     e.str("PRAZO_API_TOKEN", ""),
-			SyncInterval: e.duration("PRAZO_SYNC_INTERVAL", DefaultSyncInterval),
-			MaxUsers:     e.int("PRAZO_MAX_USERS", DefaultMaxUsers),
+			Addr:            e.str("PRAZO_HTTP_ADDR", DefaultHTTPAddr),
+			PublicURL:       strings.TrimRight(e.str("PRAZO_PUBLIC_URL", ""), "/"),
+			APIToken:        e.str("PRAZO_API_TOKEN", ""),
+			SyncInterval:    e.duration("PRAZO_SYNC_INTERVAL", DefaultSyncInterval),
+			MaxUsers:        e.int("PRAZO_MAX_USERS", DefaultMaxUsers),
+			CORSOrigins:     e.list("PRAZO_CORS_ORIGINS"),
+			PrivacyOperator: e.str("PRAZO_PRIVACY_OPERATOR", ""),
+			PrivacyContact:  e.str("PRAZO_PRIVACY_CONTACT", ""),
 		},
 		Log: Log{Format: e.oneOf("PRAZO_LOG_FORMAT", "text", "text", "json")},
 	}
@@ -115,7 +123,13 @@ func load(getenv func(string) string) (Config, error) {
 		cfg.Storage.MasterKey = key
 	}
 	cfg.Moodle.BaseURL = strings.TrimRight(e.str("PRAZO_MOODLE_URL", baseURLOf(cfg.Moodle.ICalURL)), "/")
-	cfg.Moodle.AllowedHosts = strings.Split(e.str("PRAZO_MOODLE_HOSTS", DefaultMoodleHosts), ",")
+	cfg.Moodle.AllowedHosts = e.list("PRAZO_MOODLE_HOSTS")
+	if len(cfg.Moodle.AllowedHosts) == 0 {
+		cfg.Moodle.AllowedHosts = strings.Split(DefaultMoodleHosts, ",")
+	}
+	if c := cfg.Server.PrivacyContact; c != "" && !strings.Contains(c, "@") {
+		e.fail("PRAZO_PRIVACY_CONTACT", errors.New("informe um e-mail"))
+	}
 	if cfg.Moodle.ICalURL != "" && baseURLOf(cfg.Moodle.ICalURL) == "" {
 		e.fail("PRAZO_ICAL_URL", errors.New("precisa ser uma URL https://")) // sem ecoar: contém o authtoken
 	}

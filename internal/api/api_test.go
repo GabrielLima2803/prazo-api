@@ -103,6 +103,8 @@ type harness struct {
 	root   *memKV
 	sinks  map[string]*calendartest.Fake
 	google *fakeGoogleAuth
+	// forgotten registra os KVs cujo token do Google foi revogado.
+	forgotten int
 }
 
 func newHarness(t *testing.T) *harness {
@@ -131,8 +133,14 @@ func newHarness(t *testing.T) *harness {
 		AdminTenant: func(ctx context.Context) (*tenant.Tenant, error) {
 			return manager.Register(ctx, tenant.User{ID: "admin"})
 		},
-		GoogleReady:  func(context.Context, store.KV) bool { return false },
-		GoogleAuth:   h.google,
+		GoogleReady: func(context.Context, store.KV) bool { return false },
+		GoogleAuth:  h.google,
+		ForgetGoogle: func(ctx context.Context, kv store.KV) error {
+			h.forgotten++
+			return kv.Delete(ctx, store.KeyGoogleToken)
+		},
+		CORSOrigins:  []string{"http://localhost:8081"},
+		Privacy:      Privacy{Operator: "Fulano", Contact: "privacidade@example.com"},
 		CalendarName: "Prazo — UDESC",
 		Log:          discard,
 	}))

@@ -7,7 +7,7 @@
 | URL do iCal (`authtoken`) | `PRAZO_ICAL_URL` | dá acesso ao calendário sem senha; **muda quando a senha do Moodle muda** |
 | token do Moodle | `PRAZO_MOODLE_TOKEN` | Fase 5: criptografado em repouso |
 | senha do Moodle | **em lugar nenhum** | usada só para obter o token, em memória, e zerada logo depois (`clear`) |
-| refresh token do Google | `PRAZO_DATA_DIR/google_token.enc` | AES-256-GCM com a chave `PRAZO_MASTER_KEY`; SQLite na Fase 3 |
+| refresh token do Google | `PRAZO_DATA_DIR/google_token.enc` | AES-256-GCM com a chave `PRAZO_MASTER_KEY`; revogado no Google ao desconectar ou excluir a conta |
 | credencial OAuth (`client_secret`) | `secrets/google-oauth.json` (0600) | ignorada pelo git e pelo build do Docker |
 | `PRAZO_API_TOKEN` | só no ambiente (`.env`) e no Keychain/Keystore do celular | comparado em tempo constante; nunca vai em cookie nem em URL |
 | `PRAZO_MASTER_KEY` | só no ambiente (`.env`, 0600) | nunca no disco de dados nem no repositório |
@@ -62,17 +62,26 @@ Há testes para cada um desses caminhos (`logging_test.go` e `client_test.go`).
 
 - Sessões do app: token aleatório de 52 caracteres entregue só no login;
   no disco fica apenas o SHA-256 (`app_sessions.enc`, cifrado). Máximo de 10
-  aparelhos; sair revoga a sessão do aparelho.
-- Login restrito ao dono do servidor (conta do Moodle) e limitado a 10
-  tentativas por minuto; o próprio Moodle bloqueia senhas erradas em série.
+  aparelhos, validade de 180 dias; sair revoga a sessão do aparelho.
+- Login só nos Moodles de `PRAZO_MOODLE_HOSTS`. A lista vazia recusa todos
+  (falha fechada), para o servidor nunca buscar um endereço qualquer (SSRF).
+  O cliente HTTP só segue redirecionamentos para HTTPS.
+- Limites de login: 20 por minuto no total e 5 a cada 15 minutos por conta
+  (Moodle + usuário), para ninguém testar senhas de outra pessoa por aqui.
 
 - Toda rota fora `/healthz` exige o token Bearer; sem ele, 401 sem detalhes.
 - Por padrão escuta só em `127.0.0.1`. Para o celular, `0.0.0.0:8080` na
   rede local: o tráfego é HTTP puro, então qualquer um na mesma rede Wi-Fi
   poderia ver o token. Em casa é aceitável; fora dela, use HTTPS (Tailscale
   ou um proxy com TLS).
-- CORS liberado só para facilitar o desenvolvimento pelo navegador; a
-  proteção real é o token, que não é enviado automaticamente pelo navegador.
+- CORS desligado por padrão: o app nativo não precisa. Para o Expo web, libere
+  as origens em `PRAZO_CORS_ORIGINS` só em desenvolvimento.
+- Cabeçalhos em todas as respostas: `nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, HSTS, CSP restritiva e `Cache-Control:
+  no-store` (as respostas trazem dados pessoais).
+- Erros 500 respondem uma mensagem genérica (`code: internal`); o detalhe
+  vai só para o log. A página de callback do Google também não repete a
+  resposta do Google.
 - Corpo do `PUT` limitado a 64 KB, campos desconhecidos rejeitados.
 - Com o Tailscale Funnel, a API fica na internet por HTTPS. Continua exigindo
   o token (32+ bytes aleatórios); só `/healthz` e o callback do OAuth são
@@ -82,6 +91,13 @@ Há testes para cada um desses caminhos (`logging_test.go` e `client_test.go`).
   (`exp://`, `prazo://`), nunca `http(s)`, para não virar redirecionador aberto.
 - O token guarda qual credencial o emitiu (`installed` ou `web`), porque o
   refresh só funciona com a mesma credencial.
+
+## Privacidade (LGPD)
+
+Detalhes em [privacidade.md](privacidade.md). Em resumo: sem banco de dados,
+dados mínimos e cifrados, página pública `/privacidade`, exportação
+(`GET /api/v1/account/export`) e exclusão da conta (`DELETE /api/v1/account`)
+pelo próprio app.
 
 ## Comunicação com o Moodle
 
@@ -105,4 +121,5 @@ Há testes para cada um desses caminhos (`logging_test.go` e `client_test.go`).
 
 - Rotação de chave: hoje a versão identifica o formato; falta um id de chave
   para reabrir segredos antigos com a chave anterior.
-- Teste de que nenhum segredo aparece em texto plano no SQLite.
+- Excluir automaticamente contas sem uso há muito tempo (hoje ficam até o
+  usuário excluir).

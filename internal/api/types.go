@@ -26,11 +26,25 @@ type Deps struct {
 	GoogleReady func(ctx context.Context, kv store.KV) bool
 	// GoogleAuth é nil quando a autorização pelo app não foi configurada
 	// (falta PRAZO_PUBLIC_URL ou a credencial web).
-	GoogleAuth   GoogleAuth
+	GoogleAuth GoogleAuth
+	// ForgetGoogle revoga no Google e apaga o token do usuário (excluir conta).
+	// Pode devolver google.ErrRevoke quando só a parte local deu certo.
+	ForgetGoogle func(ctx context.Context, kv store.KV) error
+	// CORSOrigins são as origens liberadas para o app no navegador; vazio
+	// desliga o CORS (o app nativo não precisa).
+	CORSOrigins []string
+	// Privacy identifica quem responde pelos dados na página /privacidade.
+	Privacy      Privacy
 	CalendarName string
 	Log          *slog.Logger
 	PlanMaxAge   time.Duration
 	SyncTimeout  time.Duration
+}
+
+// Privacy são os dados do controlador exigidos pela LGPD (art. 9º e 41).
+type Privacy struct {
+	Operator string // quem mantém o servidor
+	Contact  string // e-mail para pedidos do titular
 }
 
 type Deadline struct {

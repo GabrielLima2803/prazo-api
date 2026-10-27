@@ -243,3 +243,19 @@ Formato curto: contexto → decisão → consequência.
 - **Consequência:** sem falsos ✅. A marca aparece a partir da segunda busca
   depois do login, e só para contas que entraram com usuário e senha (que
   têm token de web service).
+
+## D23. LGPD sem banco de dados
+
+- **Contexto:** outras pessoas usam o servidor, então o Prazo trata dados
+  pessoais de terceiros (LGPD) e precisa cumprir as regras do Google (Uso
+  Limitado) e das lojas (exclusão de conta pelo app). O usuário quer
+  continuar sem banco de dados.
+- **Decisão:** manter o `filekv` cifrado e guardar o mínimo: nada de prazos
+  em disco, só o mapa de sincronização. Cada usuário tem uma lista fechada de
+  chaves (`store.UserKeys`), o que torna a exclusão completa e testável.
+  Excluir a conta revoga o Google, desliga o Runner (`Runner.Close`) para
+  nenhuma sincronização atrasada recriar arquivos e só então encerra as
+  sessões. Política de privacidade servida pelo próprio servidor
+  (`/privacidade`), com o contato de `PRAZO_PRIVACY_CONTACT`.
+- **Consequência:** sem backups, a exclusão é imediata e definitiva. Uma
+  chave nova por usuário precisa entrar em `store.UserKeys`.
