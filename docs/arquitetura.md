@@ -2,92 +2,81 @@
 
 ## Visão geral
 
-O fluxo de sincronização é `fetch → normalize → diff → apply`. Cada etapa
-mora num pacote com uma responsabilidade só. O domínio não conhece Moodle,
-Google nem banco.
+O fluxo de sincronização é `fetch → normalize → diff → apply`. Os pacotes são
+organizados **por assunto**, não por camada técnica: tudo o que fala com o
+Moodle fica em `moodle`, tudo o que grava no disco em `storage`, e assim por
+diante. O domínio não conhece Moodle, Google nem disco.
 
 ```mermaid
 flowchart LR
-    subgraph Fontes
-        ICAL[source/ical<br/>exportação iCal]
-        WS[source/webservice<br/>API REST]
-    end
-    MOODLE[moodle<br/>convenções do Moodle<br/>puro, sem I/O]
+    MOODLE[moodle<br/>iCal, web services,<br/>login, conta]
     DOMAIN[domain<br/>Deadline, Normalize,<br/>Filter, título, hash]
-    SYNC[sync<br/>caso de uso]
-    CAL[calendar<br/>Deadline → Event<br/>interface Sink]
-    GOOGLE[calendar/google<br/>Calendar API + OAuth]
-    STORE[store<br/>interface KV]
-    FILEKV[store/filekv<br/>arquivos cifrados<br/>SQLite na Fase 3]
-    CRYPTO[crypto<br/>AES-256-GCM]
+    SYNC[sync<br/>diff, Runner,<br/>preferências]
+    CAL[calendar<br/>Deadline → Event,<br/>Google + OAuth]
+    STORAGE[storage<br/>KV em arquivos<br/>cifrados AES-GCM]
+    TENANT[tenant<br/>usuários e sessões]
+    API[api<br/>HTTP do app]
 
-    ICAL -- usa --> MOODLE
-    WS -- usa --> MOODLE
-    MOODLE -- produz --> DOMAIN
-    ICAL -- "[]domain.Deadline" --> SYNC
+    MOODLE -- "[]domain.Deadline" --> SYNC
+    MOODLE --> DOMAIN
     SYNC --> DOMAIN
-    SYNC --> CAL
-    GOOGLE -. implementa .-> CAL
-    SYNC --> STORE
-    FILEKV -. implementa .-> STORE
-    FILEKV --> CRYPTO
+    SYNC -- "interface Sink" --> CAL
+    SYNC -- "interface KV" --> STORAGE
+    TENANT --> SYNC
+    TENANT --> MOODLE
+    API --> TENANT
 ```
 
 ## Pacotes
 
 ```
-cmd/prazo/                 composição: flags, config, dependências; sem regra de negócio
+cmd/prazo/          composição: flags, config, dependências; sem regra de negócio
 internal/
-├── api/                   API HTTP do app (stdlib net/http, token Bearer)
-├── calendar/              Deadline → Event (id, cor, lembretes, janela) e a interface Sink
-│   ├── google/            Sink com a Calendar API; OAuth loopback + PKCE
-│   └── calendartest/      Sink em memória para testes
-├── collections/           Set[T] e Counter[K] genéricos
-├── config/                variáveis de ambiente → Config (valida tudo e reporta todos os erros)
-├── crypto/                AES-256-GCM com versão e AAD (segredos em repouso)
-├── domain/                entidades e regras puras
-├── moodle/                interpretação de convenções do Moodle (nomes de evento, shortnames)
-├── source/                interface Source
-│   ├── ical/              cliente e parser da exportação iCal + adaptador para Source
-│   └── webservice/        cliente da API REST e dos endpoints públicos do app
-├── store/                 interface KV e chaves conhecidas
-│   └── filekv/            KV em arquivos cifrados (0600, escrita atômica)
-├── sync/                  caso de uso: Plan, Sync e Runner (execuções serializadas, agendamento, cache)
-├── doctor/                diagnóstico da instância (coleta separada da impressão)
-├── httpx/                 HTTP com retry, backoff + jitter, limite de concorrência e de corpo
-├── logging/               slog com redação de segredos
-├── prefs/                 personalização do app (ocultos, cores, lembretes), cifrada no KV
-└── retry/                 backoff exponencial com full jitter (usado por httpx e google)
-testdata/                  fixtures .ics (sintético + real anonimizado do CCT)
-docs/                      esta documentação
+├── api/            API HTTP do app: rotas, middleware, DTOs, página de privacidade
+├── calendar/       Deadline → Event (id, cor, lembretes) e a interface Sink;
+│   │               Google Agenda: GoogleSink, OAuth (terminal e app), revogação
+│   └── calendartest/  Sink em memória para testes (como o httptest da stdlib)
+├── collections/    Set[T] e Counter[K] genéricos
+├── config/         variáveis de ambiente → Config (valida tudo e reporta todos os erros)
+├── doctor/         diagnóstico da instância do Moodle (coleta separada da impressão)
+├── domain/         entidades e regras puras: Deadline, Normalize, filtros, hash
+├── httpx/          cliente HTTP: retry com backoff + jitter, limites, erros sem segredos
+├── logging/        slog com redação de segredos
+├── moodle/         tudo do Moodle: Source, cliente e parser do iCal, web services,
+│                   login (Authenticator), conta conectada, status de entrega,
+│                   interpretação de nomes de evento e siglas
+├── storage/        interface KV, FileKV (arquivos cifrados, escrita atômica) e AES-256-GCM
+├── sync/           caso de uso: Plan, Sync, diff com remoção segura, Runner e preferências
+└── tenant/         usuários (um espaço no KV por aluno) e sessões do app
+tests/              testes de integração (API inteira via HTTP com Moodle falso)
+└── testdata/       fixtures .ics (sintético + real anonimizado do CCT)
+docs/               esta documentação
 ```
 
-### Organização interna de cada pacote
+### Organização dentro de um pacote
 
-Todos seguem o mesmo padrão:
-
-| Arquivo | Conteúdo |
-|---|---|
-| `types.go` | tipos exportados do pacote e a doc do pacote |
-| `errors.go` | erros sentinela (`ErrX`) e tipos de erro (`*MoodleError`, `*StatusError`) |
-| demais `.go` | comportamento, agrupado por assunto (`client.go`, `auth.go`, `api.go`, `parse.go`...) |
-| `*_test.go` | testes da própria package (white-box) |
+- Um pacote por assunto; os arquivos são nomeados pelo conceito
+  (`ical.go`, `ical_parse.go`, `webservice_auth.go`, `google_oauth.go`).
+- Tipos e erros ficam no arquivo do conceito a que pertencem, não em
+  `types.go`/`errors.go` genéricos.
+- `doc.go` traz a descrição do pacote.
+- Testes **unitários** ficam ao lado do código (`ical_parse_test.go`), no mesmo
+  pacote, para testar também o que não é exportado. Testes de **integração**
+  ficam em `tests/` e só usam a API pública dos pacotes.
 
 ### Regras de dependência
 
 - `domain` só importa a stdlib e `collections`.
-- `moodle` importa `domain` (produz `DeadlineType`/`Phase`) e nunca faz I/O.
-- `source/*` importam `domain` e `moodle`. Uma fonte nunca importa outra.
-- `sync` depende das **interfaces** `source.Source`, `calendar.Sink` e
-  `store.KV`, nunca das implementações.
-- `calendar` não conhece o Google; `calendar/google` é a única parte que
-  importa a API do Google.
+- `moodle` produz `domain.Deadline`; nunca importa `sync`, `calendar` ou `api`.
+- `sync` depende das **interfaces** `moodle.Source`, `calendar.Sink` e
+  `storage.KV`, nunca das implementações (`ICalSource`, `GoogleSink`, `FileKV`).
+- Só `calendar` importa as bibliotecas do Google.
 - Só o `cmd/prazo` conhece todas as peças e as conecta.
 
 Interfaces só existem onde há mais de uma implementação real ou um fake de
-teste: `source.Source` (iCal e webservice, e o fake do `sync`),
-`calendar.Sink` (Google e `calendartest`) e `store.KV` (arquivos agora,
-SQLite na Fase 3).
+teste: `moodle.Source` (iCal e o fake do `sync`), `calendar.Sink`
+(`GoogleSink` e `calendartest`) e `storage.KV` (`FileKV` e o KV em memória dos
+testes).
 
 ## Tipos centrais
 
@@ -135,7 +124,7 @@ Função pura, aplicada nesta ordem:
 4. **Calcula** o `ContentHash`.
 5. **Ordena** por data e `SourceID`, para a saída ser determinística.
 
-### `source.Source`
+### `moodle.Source`
 
 ```go
 type Source interface {
@@ -181,10 +170,10 @@ com os prazos, a quantidade bruta recebida e o instante do cálculo. O relógio
 
 - Os erros sempre carregam contexto: `fmt.Errorf("fetch ical: %w", err)`.
 - Condições que o chamador precisa distinguir viram sentinelas, testáveis com
-  `errors.Is`. Exemplos: `ical.ErrNotICalendar`, `webservice.ErrServiceUnavailable`
+  `errors.Is`. Exemplos: `moodle.ErrNotICalendar`, `moodle.ErrServiceUnavailable`
   e `httpx.ErrBodyTooLarge`.
 - Erros que carregam dados são tipos, testáveis com `errors.As`:
-  `httpx.StatusError` (código e Retry-After) e `webservice.MoodleError`
+  `httpx.StatusError` (código e Retry-After) e `moodle.WebServiceError`
   (função, código e mensagem).
 - Não há `panic` fora do `main`.
 

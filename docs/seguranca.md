@@ -34,7 +34,7 @@ Regras:
 
 Há testes para cada um desses caminhos (`logging_test.go` e `client_test.go`).
 
-## Criptografia (`internal/crypto`)
+## Criptografia (`internal/storage`)
 
 - AES-256-GCM, nonce aleatório de 12 bytes por gravação.
 - Formato: `versão (1 byte) | nonce | ciphertext+tag`. A versão permite trocar
