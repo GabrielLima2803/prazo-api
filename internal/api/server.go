@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	gosync "sync"
 	"time"
@@ -16,9 +17,25 @@ import (
 
 const maxBody = 64 << 10
 
+// Limites de login: um teto global (protege o Moodle e o servidor) e um por
+// conta (impede tentar muitas senhas de uma mesma pessoa por aqui).
+const (
+	loginGlobalMax     = 20
+	loginGlobalWindow  = time.Minute
+	loginAccountMax    = 5
+	loginAccountWindow = 15 * time.Minute
+)
+
+// hstsMaxAge é um ano; os navegadores ignoram o cabeçalho fora do HTTPS.
+const hstsMaxAge = "max-age=31536000"
+
+// Política padrão: as respostas da API são JSON e nunca devem rodar como página.
+const apiCSP = "default-src 'none'; frame-ancestors 'none'"
+
 type server struct {
 	Deps
-	logins *limiter
+	logins        *limiter
+	accountLogins *limiter
 }
 
 // New devolve o handler com todas as rotas. /healthz, o login e o callback do
@@ -30,7 +47,11 @@ func New(d Deps) http.Handler {
 	if d.SyncTimeout <= 0 {
 		d.SyncTimeout = 3 * time.Minute
 	}
-	s := &server{Deps: d, logins: newLimiter(20, time.Minute)}
+	s := &server{
+		Deps:          d,
+		logins:        newLimiter(loginGlobalMax, loginGlobalWindow),
+		accountLogins: newLimiter(loginAccountMax, loginAccountWindow),
+	}
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/status", s.status)
@@ -44,6 +65,8 @@ func New(d Deps) http.Handler {
 	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	api.HandleFunc("POST /api/v1/google/auth", s.googleAuth)
 	api.HandleFunc("DELETE /api/v1/google", s.deleteGoogle)
+	api.HandleFunc("GET /api/v1/account/export", s.exportAccount)
+	api.HandleFunc("DELETE /api/v1/account", s.deleteAccount)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -55,7 +78,8 @@ func New(d Deps) http.Handler {
 	// Quem chega aqui é o navegador vindo do Google; o state prova que a
 	// autorização começou pelo app autenticado.
 	mux.HandleFunc("GET /oauth/google/callback", s.googleCallback)
-	return s.logRequests(cors(mux))
+	mux.HandleFunc("GET /privacidade", s.privacyPage)
+	return s.logRequests(secureHeaders(cors(d.CORSOrigins, mux)))
 }
 
 type ctxKey struct{}
@@ -91,43 +115,81 @@ func (s *server) resolve(ctx context.Context, token string, bearer bool) (*tenan
 	return s.Tenants.Get(ctx, userID)
 }
 
-// limiter é uma janela fixa global para as rotas de login; o próprio Moodle
-// também bloqueia contas após várias senhas erradas.
+// limiter é uma janela fixa por chave. As janelas vencidas são descartadas a
+// cada chamada; o limite global vem antes, então o mapa fica pequeno.
 type limiter struct {
 	mu     gosync.Mutex
 	max    int
 	window time.Duration
-	start  time.Time
-	count  int
+	now    func() time.Time
+	hits   map[string]*window
 }
 
-func newLimiter(max int, window time.Duration) *limiter {
-	return &limiter{max: max, window: window}
+type window struct {
+	start time.Time
+	count int
 }
 
-func (l *limiter) allow() bool {
+func newLimiter(max int, d time.Duration) *limiter {
+	return &limiter{max: max, window: d, now: time.Now, hits: map[string]*window{}}
+}
+
+func (l *limiter) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	now := time.Now()
-	if now.Sub(l.start) > l.window {
-		l.start, l.count = now, 0
+	now := l.now()
+	for k, w := range l.hits {
+		if now.Sub(w.start) > l.window {
+			delete(l.hits, k)
+		}
 	}
-	l.count++
-	return l.count <= l.max
+	w := l.hits[key]
+	if w == nil {
+		w = &window{start: now}
+		l.hits[key] = w
+	}
+	w.count++
+	return w.count <= l.max
 }
 
-// cors libera o app rodando no navegador (Expo web) em desenvolvimento. A
-// proteção real é o token, que nunca vai em cookie.
-func cors(next http.Handler) http.Handler {
+// cors libera só as origens configuradas (PRAZO_CORS_ORIGINS), para o app
+// rodando no navegador em desenvolvimento. O app nativo não precisa de CORS.
+// "*" libera qualquer origem: a proteção real é o token, que nunca vai em
+// cookie, mas em produção é melhor deixar vazio.
+func cors(origins []string, next http.Handler) http.Handler {
+	if len(origins) == 0 {
+		return next
+	}
+	anyOrigin := slices.Contains(origins, "*")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && (anyOrigin || slices.Contains(origins, origin)) {
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", origin)
+			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			h.Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
+			h.Add("Vary", "Origin")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// secureHeaders vale para todas as respostas. As páginas HTML (callback do
+// Google e privacidade) trocam a CSP pela delas.
+func secureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Access-Control-Allow-Origin", "*")
-		h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		h.Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Strict-Transport-Security", hstsMaxAge)
+		h.Set("Content-Security-Policy", apiCSP)
+		// As respostas trazem dados pessoais: nada de cache em proxy ou disco.
+		h.Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -164,6 +226,15 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 func writeError(w http.ResponseWriter, code int, err error) {
 	writeJSON(w, code, errorBody{Error: err.Error()})
 }
+
+// internalError registra o erro completo e responde uma mensagem genérica:
+// detalhes internos (caminhos, chaves, respostas de terceiros) não saem daqui.
+func (s *server) internalError(w http.ResponseWriter, r *http.Request, err error) {
+	s.Log.Error("erro interno", "method", r.Method, "path", r.URL.Path, "err", err)
+	writeCodedError(w, http.StatusInternalServerError, "internal", errInternal)
+}
+
+var errInternal = errors.New("erro interno no servidor do Prazo; tente de novo em instantes")
 
 func writeCodedError(w http.ResponseWriter, status int, code string, err error) {
 	writeJSON(w, status, errorBody{Error: err.Error(), Code: code})

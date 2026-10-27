@@ -134,7 +134,7 @@ func (s *server) courses(w http.ResponseWriter, r *http.Request) {
 func (s *server) getPreferences(w http.ResponseWriter, r *http.Request) {
 	p, err := tenantOf(r).Prefs.Load(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		s.internalError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
@@ -150,7 +150,7 @@ func (s *server) putPreferences(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, prefs.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, err)
 	case err != nil:
-		writeError(w, http.StatusInternalServerError, err)
+		s.internalError(w, r, err)
 	default:
 		writeJSON(w, http.StatusOK, saved)
 	}

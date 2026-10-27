@@ -6,6 +6,8 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+
+	"github.com/GabrielLima2803/prazo-sync/internal/calendar/google"
 )
 
 var errGoogleAppAuthOff = errors.New("o servidor não está configurado para autorizar o Google pelo app")
@@ -32,11 +34,17 @@ func (s *server) deleteGoogle(w http.ResponseWriter, r *http.Request) {
 		writeCodedError(w, http.StatusNotImplemented, "google_app_auth_unavailable", errGoogleAppAuthOff)
 		return
 	}
-	if err := s.GoogleAuth.Disconnect(r.Context(), tenantOf(r).User.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+	err := s.GoogleAuth.Disconnect(r.Context(), tenantOf(r).User.ID)
+	switch {
+	case errors.Is(err, google.ErrRevoke):
+		// O token já saiu daqui; só o Google não confirmou.
+		s.Log.Warn("revogar acesso do Google", "user", tenantOf(r).User.ID, "err", err)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "revoked": false})
+	case err != nil:
+		s.internalError(w, r, err)
+	default:
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "revoked": true})
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *server) googleCallback(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +62,7 @@ func (s *server) googleCallback(w http.ResponseWriter, r *http.Request) {
 		page.ReturnTo = template.URL(returnTo) // validado no Start: só esquemas de app
 		if err != nil {
 			s.Log.Warn("autorização do Google falhou", "user", userID, "err", err)
-			page.OK, page.Message = false, err.Error()
+			page.OK, page.Message = false, callbackMessage(err)
 		} else {
 			s.Log.Info("Google autorizado pelo app", "user", userID)
 			if t, err := s.Tenants.Get(r.Context(), userID); err == nil {
@@ -71,11 +79,28 @@ func (s *server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Security-Policy", pageCSP)
 	if !page.OK {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	callbackTmpl.Execute(w, page)
+}
+
+// pageCSP vale para as páginas HTML do servidor: só estilo e script embutidos.
+const pageCSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+// callbackMessage traduz o erro para quem está no navegador, sem repetir
+// detalhes da resposta do Google.
+func callbackMessage(err error) string {
+	switch {
+	case errors.Is(err, google.ErrUnknownState):
+		return "A autorização expirou. Comece de novo pelo app."
+	case errors.Is(err, google.ErrScopeDenied):
+		return "Marque a permissão de acesso às agendas e tente de novo pelo app."
+	case errors.Is(err, google.ErrNoRefreshToken):
+		return "O Google não liberou o acesso contínuo. Remova o Prazo em myaccount.google.com/permissions e tente de novo pelo app."
+	}
+	return "Não foi possível concluir a autorização. Tente de novo pelo app."
 }
 
 type callbackPage struct {
