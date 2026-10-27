@@ -6,13 +6,15 @@ JSON sobre HTTP, consumida pelo [prazo-app](https://github.com/GabrielLima2803/p
 
 O app entra com o Moodle: `POST /auth/login` (`{baseUrl, username, password}`)
 ou `POST /auth/ical` (`{icalUrl}`) devolvem `{token, moodle}`. O token é uma
-sessão do app (até 10 aparelhos; só o hash SHA-256 fica no disco) e vai em
-`Authorization: Bearer <token>` nas rotas de `/api/v1`. `POST
-/api/v1/auth/logout` encerra a sessão do aparelho.
+sessão do app (até 10 aparelhos, validade de 180 dias; só o hash SHA-256 fica
+no disco) e vai em `Authorization: Bearer <token>` nas rotas de `/api/v1`.
+`POST /api/v1/auth/logout` encerra a sessão do aparelho.
 
-- Só o **dono** entra: a conta do Moodle da `PRAZO_ICAL_URL` (pelo `userid`)
-  ou, sem ela, a primeira que entrar. Outra conta recebe 403 `not_owner`.
-- As rotas de login aceitam 10 tentativas por minuto (429 `too_many_attempts`).
+- Cada conta do Moodle tem o próprio espaço. Só os Moodles de
+  `PRAZO_MOODLE_HOSTS` são aceitos (403 `host_not_allowed`), até
+  `PRAZO_MAX_USERS` usuários (403 `too_many_users`).
+- Limites de login (429 `too_many_attempts`): 20 tentativas por minuto no
+  servidor todo e 5 a cada 15 minutos por conta.
 - O `PRAZO_API_TOKEN` continua valendo em `/api/v1`, para o terminal e
   administração.
 
@@ -37,17 +39,20 @@ prazos e avisa que falta o `prazo auth`.
 | `PUT /api/v1/preferences` | substitui as preferências; 422 se inválidas, 400 para JSON desconhecido |
 | `POST /api/v1/sync` | sincroniza agora e devolve o resultado; 409 se já houver uma em andamento |
 | `GET /api/v1/moodle` | conta conectada (nome, site, método); nunca devolve a URL do iCal nem o token |
-| `POST /api/v1/moodle/login` | `{baseUrl, username, password}` → token de web service → authtoken da exportação → URL do iCal; testa o calendário antes de salvar |
-| `POST /api/v1/moodle/ical` | `{icalUrl}` para contas só com SSO; testa antes de salvar |
 | `POST /api/v1/google/auth` | `{returnTo?}` → `{authUrl}`; 501 `google_app_auth_unavailable` sem `PRAZO_PUBLIC_URL` e credencial web |
-| `DELETE /api/v1/google` | esquece o token do Google |
+| `DELETE /api/v1/google` | revoga o acesso no Google e apaga o token; `revoked: false` se o Google não confirmou |
+| `GET /api/v1/account/export` | cópia dos dados do usuário em JSON (LGPD, portabilidade), sem credenciais |
+| `DELETE /api/v1/account` | exclui a conta: revoga o Google, apaga todos os dados do usuário e encerra todas as sessões |
+| `POST /api/v1/auth/logout` | encerra a sessão deste aparelho |
 | `GET /oauth/google/callback` | **público**: o Google devolve o código aqui; o `state` (uso único, 10 min) prova que a autorização começou no app autenticado |
-| `DELETE /api/v1/moodle` | esquece a conta (volta a `PRAZO_ICAL_URL`, se houver) |
+| `GET /privacidade` | **público**: política de privacidade e termos de uso (LGPD, Google, lojas) |
 
 Erros trazem um `code` estável além da mensagem: `moodle_not_connected` (409 em
 `/deadlines` e `/courses`), `invalid_login`, `export_unavailable`,
 `service_unavailable`, `invalid_url`, `not_icalendar`, `empty_feed`,
-`moodle_unreachable`, `moodle_reauth`.
+`moodle_unreachable`, `moodle_reauth`, `too_many_attempts`, `internal`.
+Erros internos (500, `internal`) trazem só uma mensagem genérica; o detalhe
+fica no log do servidor.
 
 ## Senha do Moodle trocada
 

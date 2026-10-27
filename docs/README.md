@@ -32,6 +32,7 @@ Google:
 | [moodle-udesc.md](moodle-udesc.md) | o que descobrimos sobre as instâncias Moodle da UDESC (dados reais) |
 | [decisoes.md](decisoes.md) | registro de decisões técnicas e o porquê de cada uma |
 | [seguranca.md](seguranca.md) | tratamento de segredos, redação de logs, container |
+| [privacidade.md](privacidade.md) | LGPD: dados tratados, direitos do titular e checklist antes de publicar |
 | [desenvolvimento.md](desenvolvimento.md) | como rodar, testar, construir a imagem e convenções do código |
 | [api.md](api.md) | rotas da API usada pelo app, preferências e cache |
 | [roadmap.md](roadmap.md) | o que foi entregue em cada fase e os próximos passos detalhados |
