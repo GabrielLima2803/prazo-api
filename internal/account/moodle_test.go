@@ -166,7 +166,7 @@ func TestLoginFailures(t *testing.T) {
 		t.Errorf("host fora da lista: %v", err)
 	}
 	noExport := fakeMoodle(t, false)
-	if _, err := NewAuthenticator(noExport.http()).Login(ctx, noExport.URL, "aluno", password); !errors.Is(err, ErrExportUnavailable) {
+	if _, err := NewAuthenticator(noExport.http(), noExport.host()).Login(ctx, noExport.URL, "aluno", password); !errors.Is(err, ErrExportUnavailable) {
 		t.Errorf("sem a função de exportação: %v", err)
 	}
 }
@@ -174,7 +174,7 @@ func TestLoginFailures(t *testing.T) {
 func TestFromICal(t *testing.T) {
 	ctx := context.Background()
 	srv := fakeMoodle(t, true)
-	auth := NewAuthenticator(srv.http())
+	auth := NewAuthenticator(srv.http(), srv.host())
 	if _, err := auth.FromICal(srv.URL + "/calendar/export_execute.php?authtoken=x"); !errors.Is(err, ErrMissingUserID) {
 		t.Fatalf("sem userid: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestRejectedTokenMarksReauth(t *testing.T) {
 	srv := fakeMoodle(t, true)
 	kv := memKV{}
 	svc := NewService(kv, srv.http(), discard, "")
-	m, _ := NewAuthenticator(srv.http()).Login(ctx, srv.URL, "aluno", password)
+	m, _ := NewAuthenticator(srv.http(), srv.host()).Login(ctx, srv.URL, "aluno", password)
 	if _, err := svc.Save(ctx, m); err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestRejectedTokenMarksReauth(t *testing.T) {
 		t.Fatal("a conta deveria ficar marcada")
 	}
 
-	fresh, _ := NewAuthenticator(srv.http()).Login(ctx, srv.URL, "aluno", password)
+	fresh, _ := NewAuthenticator(srv.http(), srv.host()).Login(ctx, srv.URL, "aluno", password)
 	if _, err := svc.Save(ctx, fresh); err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestSubmittedNeedsToBeSeenPendingFirst(t *testing.T) {
 	svc := NewService(kv, srv.http(), discard, "")
 	// O fixture sintético tem eventos em 2026; o relógio fica antes deles.
 	svc.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
-	m, _ := NewAuthenticator(srv.http()).Login(ctx, srv.URL, "aluno", password)
+	m, _ := NewAuthenticator(srv.http(), srv.host()).Login(ctx, srv.URL, "aluno", password)
 	svc.Save(ctx, m)
 
 	first, err := svc.Source().Fetch(ctx)
@@ -274,5 +274,12 @@ func TestSubmittedNeedsToBeSeenPendingFirst(t *testing.T) {
 		if want := eventID(d.SourceID) == ids[0]; d.Submitted != want {
 			t.Errorf("%s: Submitted = %v; quer %v", d.SourceID, d.Submitted, want)
 		}
+	}
+}
+
+func TestNoAllowedHostsRefusesEveryone(t *testing.T) {
+	srv := fakeMoodle(t, true)
+	if _, err := NewAuthenticator(srv.http()).Login(context.Background(), srv.URL, "aluno", password); !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("sem hosts liberados: %v", err)
 	}
 }

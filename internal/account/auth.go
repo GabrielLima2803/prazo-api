@@ -14,7 +14,8 @@ import (
 )
 
 // NewAuthenticator restringe o login aos hosts de allowedHosts, para que o
-// servidor não faça requisições a qualquer endereço informado no app.
+// servidor não faça requisições a qualquer endereço informado no app (SSRF).
+// Sem nenhum host, nenhum login é aceito.
 func NewAuthenticator(http *httpx.Client, allowedHosts ...string) *Authenticator {
 	set := collections.Set[string]{}
 	for _, h := range allowedHosts {
@@ -82,7 +83,7 @@ func (a *Authenticator) FromICal(icalURL string) (Moodle, error) {
 }
 
 func (a *Authenticator) checkHost(base string) error {
-	if len(a.allowed) > 0 && !a.allowed.Has(hostOf(base)) {
+	if !a.allowed.Has(hostOf(base)) {
 		return ErrHostNotAllowed
 	}
 	return nil
