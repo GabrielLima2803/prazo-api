@@ -1,13 +1,14 @@
-package api
+package tests
 
 import (
+	"github.com/GabrielLima2803/prazo-sync/internal/api"
+	"github.com/GabrielLima2803/prazo-sync/internal/storage"
+	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
+
 	"io"
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/GabrielLima2803/prazo-sync/internal/storage"
-	"github.com/GabrielLima2803/prazo-sync/internal/tenant"
 )
 
 func TestDeleteAccount(t *testing.T) {
@@ -76,7 +77,7 @@ func TestExportHasNoSecrets(t *testing.T) {
 func TestLoginLimitPerAccount(t *testing.T) {
 	h := newHarness(t)
 	wrong := `{"baseUrl":"` + h.moodle.URL + `","username":"ana","password":"errada"}`
-	for i := range LoginAttemptsPerAccount {
+	for i := range api.LoginAttemptsPerAccount {
 		if code := h.call(t, "", http.MethodPost, "/auth/login", wrong, nil); code != http.StatusUnprocessableEntity {
 			t.Fatalf("tentativa %d: %d", i+1, code)
 		}
@@ -99,7 +100,7 @@ func TestSecurityHeaders(t *testing.T) {
 		"X-Content-Type-Options":  "nosniff",
 		"X-Frame-Options":         "DENY",
 		"Cache-Control":           "no-store",
-		"Content-Security-Policy": apiCSP,
+		"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
 	} {
 		if got := resp.Header.Get(header); got != want {
 			t.Errorf("%s = %q, quero %q", header, got, want)
@@ -145,7 +146,7 @@ func TestInternalErrorsAreGeneric(t *testing.T) {
 	host := strings.TrimPrefix(h.moodle.URL, "https://")
 	// Preferências corrompidas no disco viram 500 sem detalhes.
 	h.root.Put(t.Context(), "u"+tenant.IDFor(host, 42)+"_"+storage.KeyPreferences, []byte("{corrompido"))
-	var body ErrorBody
+	var body api.ErrorBody
 	if code := h.call(t, ana.Token, http.MethodGet, "/api/v1/preferences", "", &body); code != http.StatusInternalServerError {
 		t.Fatalf("status %d", code)
 	}

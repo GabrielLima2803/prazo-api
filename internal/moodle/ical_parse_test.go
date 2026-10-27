@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseFixture(t *testing.T) {
-	f, err := os.Open("../../testdata/moodle_sintetico.ics")
+	f, err := os.Open("../../tests/testdata/moodle_sintetico.ics")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestParseTimeFormats(t *testing.T) {
 // Fixture real do Moodle do CCT (anonimizado): dobra de linha com TAB,
 // linhas de continuação vazias e vírgulas escapadas.
 func TestParseRealCCTFixture(t *testing.T) {
-	f, err := os.Open("../../testdata/moodle_cct_anon.ics")
+	f, err := os.Open("../../tests/testdata/moodle_cct_anon.ics")
 	if err != nil {
 		t.Fatal(err)
 	}

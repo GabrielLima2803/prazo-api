@@ -30,7 +30,7 @@ func loadFeed(t *testing.T, path string) moodle.Feed {
 }
 
 func TestAnalyzeSyntheticFixture(t *testing.T) {
-	feed := loadFeed(t, "../../testdata/moodle_sintetico.ics")
+	feed := loadFeed(t, "../../tests/testdata/moodle_sintetico.ics")
 	feed.Events = append(feed.Events, feed.Events[0])
 
 	r := AnalyzeICal(feed, time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC), 30*24*time.Hour)
@@ -62,7 +62,7 @@ func TestAnalyzeSyntheticFixture(t *testing.T) {
 }
 
 func TestAnalyzeRealCCTFixture(t *testing.T) {
-	feed := loadFeed(t, "../../testdata/moodle_cct_anon.ics")
+	feed := loadFeed(t, "../../tests/testdata/moodle_cct_anon.ics")
 	r := AnalyzeICal(feed, time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC), 30*24*time.Hour)
 
 	// Só o evento pessoal (sem CATEGORIES) não usa template do Moodle.

@@ -48,7 +48,7 @@ type moodle struct {
 
 func fakeMoodle(t *testing.T, withExport bool) *moodle {
 	t.Helper()
-	ics, err := os.ReadFile("../../testdata/moodle_sintetico.ics")
+	ics, err := os.ReadFile("../../tests/testdata/moodle_sintetico.ics")
 	if err != nil {
 		t.Fatal(err)
 	}

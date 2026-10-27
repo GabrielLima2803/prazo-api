@@ -83,7 +83,7 @@ func TestClientRejectsHTMLAndBadURL(t *testing.T) {
 }
 
 func TestSourceFetchRealFixture(t *testing.T) {
-	body, err := os.ReadFile("../../testdata/moodle_cct_anon.ics")
+	body, err := os.ReadFile("../../tests/testdata/moodle_cct_anon.ics")
 	if err != nil {
 		t.Fatal(err)
 	}
